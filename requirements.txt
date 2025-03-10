@@ -1,0 +1,4 @@
+numpy==2.2.3
+openwakeword==0.6.0
+pyaudio==0.2.14
+https://github.com/madsmith/speexdsp-python/releases/download/0.1.2/speexdsp_ns-0.1.2-cp313-cp313-macosx_15_0_arm64.whl
