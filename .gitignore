@@ -1,0 +1,5 @@
+.DS_Store
+config.yml
+response.mp3
+
+*.pyc

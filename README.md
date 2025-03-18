@@ -17,6 +17,14 @@ NexusVoice is a simple Python project that uses the `pyaudio` and `openwakeword`
     ```
 
 3. Install the required dependencies:
+    One of the requirements is ffmpeg for audio processing.  Installation varies by architecture
+    but on linux, you may use the following.
+    ```sh
+    apt install ffmpeg
+    ```
+
+    Python dependencies can be installed by running the following.
+    
     ```sh
     pip install -r requirements.txt
     ```

@@ -1,4 +1,12 @@
-numpy==2.2.3
+numpy~=2.2
 openwakeword==0.6.0
-pyaudio==0.2.14
+pyaudio~=0.2
+openai~=1.65
+omegaconf>=2.3
+pydub~=0.25
+setuptools
+silero=0.4.1
+torch>=2.6
+transformers~=4.49
+webrtcvad~=2.0
 https://github.com/madsmith/speexdsp-python/releases/download/0.1.2/speexdsp_ns-0.1.2-cp313-cp313-macosx_15_0_arm64.whl
