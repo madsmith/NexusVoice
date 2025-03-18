@@ -19,7 +19,6 @@ from transformers import WhisperProcessor, WhisperForConditionalGeneration
 logging.basicConfig(level=logging.WARN, format="%(message)s")
 
 from audio_utils import AudioBuffer, save_recording, save_recording_mp3
-from ChatManager import ChatManager
 from init import initialize_openwakeword
 from ai_agents import Agent, AgentManager, AudioInferenceEngine
 from config import (
