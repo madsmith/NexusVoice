@@ -3,3 +3,13 @@ config.yml
 response.mp3
 
 *.pyc
+latest_silero_models.yml
+model.js
+schema.json
+test_cleaned_fd.wav
+test_aligned_mic_vs_playback.wav
+test_mic_aligned.wav
+test_playback_aligned.wav
+recordings/recording-*.mp3
+test_cleaned_lms.wav
+samples/delay*.wav

@@ -11,14 +11,14 @@ from pydub.playback import play
 import pyaudio
 from silero import silero_stt
 import silero_vad
+import threading
 import time
 import torch
 import webrtcvad
-from transformers import WhisperProcessor, WhisperForConditionalGeneration
 
 logging.basicConfig(level=logging.WARN, format="%(message)s")
 
-from audio_utils import AudioBuffer, save_recording, save_recording_mp3
+from audio_utils import AudioBuffer, AudioRingBuffer, save_recording, save_recording_mp3
 from init import initialize_openwakeword
 from ai_agents import Agent, AgentManager, AudioInferenceEngine
 from config import (
@@ -26,8 +26,7 @@ from config import (
     NUMPY_AUDIO_FORMAT,
     AUDIO_SAMPLE_RATE,
     AUDIO_CHANNELS,
-    WAKE_WORD_AUDIO_CHUNK,
-    VAD_AUDIO_CHUNK,
+    WAKE_WORD_FRAME_CHUNK,
     SILERO_VAD_AUDIO_CHUNK,
     AUDIO_CHUNK,
     VAD_SILENCE_DURATION,
@@ -39,15 +38,15 @@ from config import (
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
+
 class NexusVoice:
     def __init__(self, config):
         self.config = config
         self.audio_stream = None
-        self.model = None
+        self.oww_model = None
         self.silero_vad = None
         self.silero_stt_model = None
         self.silero_stt_decoder = None
-        self.chat_manager = None
         if torch.backends.mps.is_available():
             self.device = torch.device("mps")
         else:
@@ -62,9 +61,10 @@ class NexusVoice:
         self.open_audio_stream()
 
         wake_word_buffer = AudioBuffer(AUDIO_FORMAT)
-        vad_buffer = AudioBuffer(AUDIO_FORMAT)
+        #vad_buffer = AudioBuffer(AUDIO_FORMAT)
         recording_buffer = AudioBuffer(AUDIO_FORMAT)
         silero_vad_buffer = AudioBuffer(AUDIO_FORMAT)
+        ring_buffer = AudioRingBuffer(AUDIO_FORMAT, max_duration=10)
 
         is_recording = False
         is_listening = True
@@ -82,10 +82,10 @@ class NexusVoice:
         logger.info("NexusVoice is ready!")
         while True:
             # How much audio is needed
-            wake_word_needed = WAKE_WORD_AUDIO_CHUNK - wake_word_buffer.frame_count()
-            vad_needed = VAD_AUDIO_CHUNK - vad_buffer.frame_count()
+            wake_word_needed = WAKE_WORD_FRAME_CHUNK - wake_word_buffer.frame_count()
+            #vad_needed = VAD_AUDIO_CHUNK - vad_buffer.frame_count()
             silero_vad_needed = SILERO_VAD_AUDIO_CHUNK - silero_vad_buffer.frame_count()
-            read_chunk_size = max(min(wake_word_needed, vad_needed, silero_vad_needed), AUDIO_CHUNK)
+            read_chunk_size = max(min(wake_word_needed, silero_vad_needed), AUDIO_CHUNK)
 
             # Read audio from the stream
             #logger.debug(f"Reading {read_chunk_size/16} ms of audio...")
@@ -96,19 +96,20 @@ class NexusVoice:
             # Add to relevant buffers
             if is_listening:
                 wake_word_buffer.append(raw_audio)
-            vad_buffer.append(raw_audio)
+            #vad_buffer.append(raw_audio)
             silero_vad_buffer.append(raw_audio)
             if is_recording:
                 recording_buffer.append(raw_audio)
-                #print(f"Recording {frames_to_seconds(read_chunk_size)} seconds Total: {frames_to_seconds(recording_buffer.frame_count())} seconds")
+            else:
+                ring_buffer.append(raw_audio)
 
             # Check if wake word detected
-            if wake_word_buffer.frame_count() >= WAKE_WORD_AUDIO_CHUNK:
+            if wake_word_buffer.frame_count() >= WAKE_WORD_FRAME_CHUNK:
                 audio = wake_word_buffer.get_bytes()
                 wake_word_buffer.clear()
                 
                 np_audio = np.frombuffer(audio, dtype=NUMPY_AUDIO_FORMAT)
-                detection = self.model.predict(np_audio)
+                detection = self.oww_model.predict(np_audio)
 
                 # Check wake words
                 #print("Detection: ", detection)
@@ -142,55 +143,67 @@ class NexusVoice:
                 vad_score = self.silero_vad(tensor_audio, AUDIO_SAMPLE_RATE).item()
                 is_speech = vad_score > VAD_ACTIVATION_THRESHOLD
 
-                if is_recording:
-                    if is_speech:
-                        silence_duration = 0
-                    else:
-                        # Silence detected
-                        silence_duration += frames_to_seconds(SILERO_VAD_AUDIO_CHUNK)
-                        if silence_duration >= VAD_SILENCE_DURATION:
-                            logger.debug(f"Recording silence for {silence_duration} seconds")
-                            is_recording = False
-                            is_listening = True
-                            silence_duration = 0.0
-                            # Process recording
-                            recording = recording_buffer.get_bytes()
-                            recording_buffer.clear()
-
-                            # filename_mp3 = self._generate_filename("mp3")
-                            # filename_wav = self._generate_filename("wav")
-                            # save_recording(recording, filename_wav)
-                            # save_recording_mp3(recording, filename_mp3)
-
-                            # time_stt = time.perf_counter()
-                            # self.silero_stt(recording)
-                            # print("STT time: ", time.perf_counter() - time_stt)
-
-                            time_whisper_stt = time.perf_counter()
-                            transcription = self.whisper_stt(recording)
-                            logger.debug(f"Whisper STT time: {time.perf_counter() - time_whisper_stt}")
-
-                            time_llama_agent = time.perf_counter()
-                            future_result = self.llama_agent.process_request(transcription)
-                            response = future_result.result()
-                            logger.debug(f"LLAMA Agent time: {time.perf_counter() - time_llama_agent}")
-
-                            time_llm_process = time.perf_counter()
-                            self.process_agent_response(response)
-                            logger.debug(f"LLM Process time: {time.perf_counter() - time_llm_process}")
-
-
-                            # time_openai_stt = time.perf_counter()
-                            # self.openai_stt(filename_mp3)
-                            # print("OpenAI STT time: ", time.perf_counter() - time_openai_stt)
-
-                            recording_duration = (len(recording) // pyaudio.get_sample_size(AUDIO_FORMAT)) / AUDIO_SAMPLE_RATE
-                            logger.debug(f"Recorded {recording_duration} seconds of audio")
-                            logger.debug("Listening...")
-                # elif is_recording:
-                #     print(f"Recording speech {frames_to_seconds(read_chunk_size)} seconds Total: {frames_to_seconds(recording_buffer.frame_count())} seconds")
+                if is_speech:
+                    silence_duration = 0.0
+                else:
+                    silence_duration += frames_to_seconds(SILERO_VAD_AUDIO_CHUNK)
                     
+                if not is_recording:
+                    if silence_duration >= VAD_SILENCE_DURATION:
+                        # No one is talking, don't need to keep buffer
+                        ring_buffer.clear()
+                else:
+                    if silence_duration >= VAD_SILENCE_DURATION:
+                        logger.debug(f"Recording silence for {silence_duration} seconds")
+                        is_recording = False
+                        is_listening = True
+                        silence_duration = 0.0
+                        # Process recording
+                        recording = recording_buffer.get_bytes()
+                        recording_buffer.clear()
 
+                        # filename_mp3 = self._generate_filename("mp3")
+                        # filename_wav = self._generate_filename("wav")
+                        # save_recording(recording, filename_wav)
+                        # save_recording_mp3(recording, filename_mp3)
+
+                        # time_stt = time.perf_counter()
+                        # self.silero_stt(recording)
+                        # print("STT time: ", time.perf_counter() - time_stt)
+
+                        # TODO: does this have to happen in this thread?
+                        if self.config.debug.save_recordings:
+                            filename_mp3 = self._generate_filename("mp3")
+                            # Add _buffered to filename
+                            alternative_buffer = AudioBuffer(AUDIO_FORMAT)
+                            alternative_buffer.append(ring_buffer.get_bytes())
+                            ring_buffer.clear()
+                            alternative_buffer.append(recording)
+                            alternative_filename = filename_mp3.with_name(filename_mp3.stem + "_buffered" + filename_mp3.suffix)
+                            save_recording_mp3(recording, filename_mp3)
+                            save_recording_mp3(alternative_buffer.get_bytes(), alternative_filename)
+
+                        time_whisper_stt = time.perf_counter()
+                        transcription = self.whisper_stt(recording)
+                        logger.debug(f"Whisper STT time: {time.perf_counter() - time_whisper_stt}")
+
+                        time_llama_agent = time.perf_counter()
+                        future_result = self.llama_agent.process_request(transcription)
+                        response = future_result.result()
+                        logger.debug(f"LLAMA Agent time: {time.perf_counter() - time_llama_agent}")
+
+                        time_llm_process = time.perf_counter()
+                        self.process_agent_response(response)
+                        logger.debug(f"LLM Process time: {time.perf_counter() - time_llm_process}")
+
+
+                        # time_openai_stt = time.perf_counter()
+                        # self.openai_stt(filename_mp3)
+                        # print("OpenAI STT time: ", time.perf_counter() - time_openai_stt)
+
+                        recording_duration = (len(recording) // pyaudio.get_sample_size(AUDIO_FORMAT)) / AUDIO_SAMPLE_RATE
+                        logger.debug(f"Recorded {recording_duration} seconds of audio")
+                        logger.debug("Listening...")
 
     def process_agent_response(self, response):
         # If response is json string, parse it
@@ -202,8 +215,7 @@ class NexusVoice:
 
     def process_agent_json(self, response):
         logger.debug("TODO: Process agent JSON response")
-
-        
+    
     def process_agent_speach(self, response):
         logger.debug(response)
         self.speak_text(response)
@@ -233,9 +245,11 @@ class NexusVoice:
             #"./models/scarlette.onnx" # model seems broken
         ]
 
-        self.model = Model(wakeword_models=models, vad_threshold=0.2, enable_speex_noise_suppression=True, inference_framework=INFERENCE_FRAMEWORK)
+        self.oww_model = Model(wakeword_models=models, vad_threshold=0.2, enable_speex_noise_suppression=True, inference_framework=INFERENCE_FRAMEWORK)
 
         logger.info("Initializing Voice Activity Detector...")
+        #TODO: Remove? This seems to only detect noise, not speech
+        # Do we need a noise detector?
         self.voice_activity_detector = webrtcvad.Vad(3)
 
         self.silero_vad = silero_vad.load_silero_vad()
@@ -283,8 +297,6 @@ class NexusVoice:
         self.agent_manager = AgentManager(self.config)
         self.llama_agent = self.agent_manager.get_agent("agent-llama")
         self.llama_agent.wait_until_ready()
-        
-
 
     def open_audio_stream(self):
         self.audio_stream = pyaudio.PyAudio().open(
@@ -292,7 +304,7 @@ class NexusVoice:
             channels=AUDIO_CHANNELS,
             rate=AUDIO_SAMPLE_RATE,
             input=True,
-            frames_per_buffer=AUDIO_CHUNK
+            frames_per_buffer=AUDIO_CHUNK*5
         )
         logger.info("NexusVoice is listening...")
         
@@ -364,7 +376,7 @@ class NexusVoice:
         return None
 
     def reset_model(self):
-        self.model.reset()
+        self.oww_model.reset()
 
 def main():
     initialize_openwakeword()

@@ -1,3 +1,5 @@
+from abc import ABC, abstractmethod
+from collections import deque
 import logging
 import numpy as np
 import pyaudio
@@ -10,15 +12,62 @@ from config import (
     AUDIO_CHANNELS
 )
 
+from bytes import ByteRingBuffer
+
 logger = logging.getLogger(__name__)
 
-class AudioBuffer:
+
+class AudioBufferBase(ABC):
     def __init__(self, audio_format, sample_rate=AUDIO_SAMPLE_RATE, channels=AUDIO_CHANNELS):
         self._audio_format = audio_format
         self._sample_rate = sample_rate
         self._channels = channels
-
         self._frame_size = pyaudio.get_sample_size(audio_format) * self._channels
+
+    @abstractmethod
+    def append(self, chunk):
+        pass
+
+    @abstractmethod
+    def get_bytes(self):
+        pass
+
+    @abstractmethod
+    def byte_count(self):
+        pass
+
+    @abstractmethod
+    def clear(self):
+        pass
+
+    def frame_count(self):
+        return self.byte_count() // self._frame_size
+
+    def get_frames(self):
+        np_dtype = self._frame_size_to_numpy()
+        audio_data = np.frombuffer(self.get_bytes(), dtype=np_dtype)
+
+        if self._channels > 1:
+            audio_data = audio_data.reshape(-1, self._channels)
+        return audio_data
+
+    def get_duration_ms(self):
+        return self.frame_count() / self._sample_rate * 1000
+
+    def _frame_size_to_numpy(self):
+        # convert frame size to numpy dtype
+        if self._frame_size == 1:
+            return np.uint8
+        elif self._frame_size == 2:
+            return np.int16
+        elif self._frame_size == 4:
+            return np.int32
+        else:
+            raise ValueError(f"Unsupported frame size {self._frame_size}")
+
+class AudioBuffer(AudioBufferBase):
+    def __init__(self, audio_format, sample_rate=AUDIO_SAMPLE_RATE, channels=AUDIO_CHANNELS):
+        super().__init__(audio_format, sample_rate, channels)
         self.chunks = []
 
     def append(self, chunk):
@@ -33,27 +82,11 @@ class AudioBuffer:
     def get_bytes(self):
         return b"".join(self.chunks)
 
-    def get_frames(self):
-        np_dtype = self._frame_size_to_numpy()
-        audio_data = np.frombuffer(self.get_bytes(), dtype=np_dtype)
-
-        if self._channels > 1:
-            audio_data = audio_data.reshape(-1, self._channels)
-        return audio_data
-
-    def get_duration_ms(self):
-        return self.frame_count() / self._sample_rate * 1000
-
     def byte_count(self):
         return sum(len(chunk) for chunk in self.chunks)
 
-    def frame_count(self):
-        return sum(len(chunk) // self._frame_size for chunk in self.chunks)
-
     def clear(self):
         self.chunks.clear()
-
-    def _frame_size_to_numpy(self):
         # convert frame size to numpy dtype
         if self._frame_size == 1:
             return np.uint8
@@ -63,7 +96,26 @@ class AudioBuffer:
             return np.int32
         else:
             raise ValueError(f"Unsupported frame size {self._frame_size}")
-        
+
+class AudioRingBuffer(AudioBufferBase):
+    def __init__(self, audio_format, sample_rate=AUDIO_SAMPLE_RATE, channels=AUDIO_CHANNELS, max_duration=1.0):
+        super().__init__(audio_format, sample_rate, channels)
+        self.max_duration = max_duration
+        buffer_size = int(max_duration * sample_rate * self._frame_size)
+        self.buffer = ByteRingBuffer(buffer_size)
+
+    def append(self, chunk):
+        self.buffer.append(chunk)
+
+    def get_bytes(self):
+        return self.buffer.get_bytes()
+    
+    def byte_count(self):
+        return self.buffer.byte_count()
+    
+    def clear(self):
+        self.buffer.clear()
+
 def save_recording(recording, filename):
     if not filename.parent.exists():
         filename.parent.mkdir(parents=True, exist_ok=True)
@@ -76,7 +128,6 @@ def save_recording(recording, filename):
         wave_file.writeframes(recording)
     
     logger.info(f"Recording saved to {filename}")
-
 
 def save_recording_mp3(recording, filename):
     if not filename.parent.exists():
@@ -96,3 +147,151 @@ def save_recording_mp3(recording, filename):
 
 
     logger.info(f"Recording saved to {filename}")
+
+
+# Below is a seperate implementation the resembles some of the above features
+# I should consolidate these into a more coherent approach at some point.
+
+import numpy as np
+import time
+import pyaudio
+
+class AudioData:
+    def __init__(self, frames: bytes, format=pyaudio.paInt16, channels=1, rate=16000, timestamp=None):
+        assert isinstance(frames, bytes) or isinstance(frames, np.ndarray), "frames must be of type bytes or numpy ndarray"
+        # Format describes how many audio bytes are in each sample
+        self.format = format
+        self.channels = channels
+        self.rate = rate
+        if isinstance(frames, np.ndarray):
+            self.frames = frames.tobytes()
+        else:
+            self.frames = frames
+        self.timestamp = timestamp
+        if not timestamp:
+            self.timestamp = time.perf_counter()
+
+    def as_array(self, dtype=None) -> np.ndarray:
+        """ Convert bytes to numpy array """
+        sample_dtype = self.get_np_type()
+
+        np_array = np.frombuffer(self.frames, dtype=sample_dtype)
+
+        if self.channels > 1:
+            np_array = np_array.reshape(-1, self.channels)
+
+        if dtype is not None and dtype != sample_dtype:
+            np_array = np_array.astype(dtype)
+
+        return np_array
+    
+    def __len__(self):
+        return self.frame_count()
+
+    def frame_count(self) -> int:
+        return len(self.frames) // pyaudio.get_sample_size(self.format) // self.channels
+    
+    def duration(self) -> float:
+        return self.frame_count() / self.rate
+
+    def end_time(self) -> float:
+        return self.timestamp + self.duration()
+    
+    def get_np_type(self):
+        sample_size = pyaudio.get_sample_size(self.format)
+        if sample_size == 1:
+            return np.uint8
+        elif sample_size == 2:
+            return np.int16
+        elif sample_size == 4:
+            return np.int32
+        elif sample_size == 8:
+            return np.float64
+        else:
+            raise ValueError(f"Unsupported sample size {sample_size}")
+
+class PlaybackBuffer:
+    def __init__(self, rate: int):
+        self.rate = rate
+        self.chunks: list[AudioData] = []
+
+    def append(self, frames: AudioData):
+        assert isinstance(frames, AudioData), "frames must be of type AudioData"
+        self.chunks.append(frames)
+
+    def prune_older_than(self, someTime: float):
+        self.chunks = [chunk for chunk in self.chunks if chunk.end_time() > someTime]
+
+    def __len__(self):
+        return len(self.chunks)
+    
+    def extract_frames(self, start: float, frame_count: int) -> np.ndarray:
+        """
+        Extracts `frame_count` samples of audio starting from `start` time.
+        Pads with zeros where data is missing.
+        """
+        output = np.zeros(frame_count, dtype=np.int16)
+        end = start + (frame_count / self.rate)
+
+        for chunk in self.chunks:
+            chunk_start = chunk.timestamp
+            chunk_end = chunk.end_time()
+
+            if chunk_end < start:
+                continue
+            if chunk_start > end:
+                continue
+
+            chunk_data = chunk.as_array()
+
+            # Calculate overlap
+            overlap_start_time = max(start, chunk_start)
+            overlap_end_time = min(end, chunk_end)
+
+            out_start_idx = int((overlap_start_time - start) * self.rate)
+            out_end_idx = int((overlap_end_time - start) * self.rate)
+
+            in_start_idx = int((overlap_start_time - chunk_start) * self.rate)
+            in_end_idx = int((overlap_end_time - chunk_start) * self.rate)
+
+            copy_len = min(out_end_idx - out_start_idx, in_end_idx - in_start_idx)
+
+            output[out_start_idx:out_start_idx + copy_len] = chunk_data[in_start_idx:in_start_idx + copy_len]
+
+        return output
+
+    def extract_window(self, start: float, end: float) -> np.ndarray:
+        """
+        Extracts a continuous buffer of audio corresponding to the playback window [start, end].
+        If there are gaps in the chunks, fills with zeros.
+        """
+        total_samples = int((end - start) * self.rate)
+        output = np.zeros(total_samples, dtype=np.int16)
+
+        for chunk in self.chunks:
+            chunk_start = chunk.timestamp
+            chunk_end = chunk.end_time()
+
+            if chunk_end < start:
+                continue
+            if chunk_start > end:
+                continue
+
+            chunk_data = chunk.as_array()
+
+            # Calculate overlap
+            overlap_start_time = max(start, chunk_start)
+            overlap_end_time = min(end, chunk_end)
+
+            out_start_idx = int((overlap_start_time - start) * self.rate)
+            out_end_idx = int((overlap_end_time - start) * self.rate)
+
+            in_start_idx = int((overlap_start_time - chunk_start) * self.rate)
+            in_end_idx = int((overlap_end_time - chunk_start) * self.rate)
+
+            # Calculate actual number of samples to copy (ensure bounds agree)
+            copy_len = min(out_end_idx - out_start_idx, in_end_idx - in_start_idx)
+
+            output[out_start_idx:out_start_idx + copy_len] = chunk_data[in_start_idx:in_start_idx + copy_len]
+
+        return output
