@@ -304,21 +304,25 @@ class PlaybackBuffer:
         """
         Print the start and end times of each series of contiguous chunks of audio data
         """
+        output = ""
+
         if len(self.chunks) == 0:
-            print(f"{prefix}No audio data")
-            return
+            return f"{prefix}No audio data"
 
         start_time = self.chunks[0].timestamp
         end_time = self.chunks[0].end_time()
         chunk_count = 1
 
         for chunk in self.chunks[1:]:
-            # Check for a gap of more than a single sample
-            if end_time - chunk.timestamp >= (2/self.rate):
-                print(f"{prefix}Playback Window: {start_time:.3f} - {end_time:.3f} [{chunk_count} chunks]")
+            # Check for a gap 
+            gap = chunk.timestamp - end_time
+            if gap > 1/self.rate:
+                output += f"{prefix}Playback Window: {start_time:.3f} - {end_time:.3f} [{chunk_count} chunks]\n"
                 start_time = chunk.timestamp
-                chunk_count = 1
+                chunk_count = 0
             chunk_count += 1
             end_time = max(end_time, chunk.end_time())
 
-        print(f"{prefix}Playback Window: {start_time:.3f} - {end_time:.3f} [{chunk_count} chunks]")
+        output += f"{prefix}Playback Window: {start_time:.3f} - {end_time:.3f} [{chunk_count} chunks]"
+        
+        return output
