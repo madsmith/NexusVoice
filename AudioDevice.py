@@ -1,9 +1,12 @@
 import pyaudio
+import logging
 import numpy as np
 import threading
 import queue
 import time
 from scipy.signal import stft, istft, chirp, spectrogram
+
+logger = logging.getLogger(__name__)
 
 from audio_utils import AudioData, PlaybackBuffer, save_recording
 from debug import TimeThis
@@ -22,7 +25,7 @@ class AudioDevice:
         self._find_devices()
         
         self.mic_buffer = queue.deque(maxlen=MIC_BUFFER_CHUNKS)
-        self.mic_buffer_2 = queue.deque(maxlen=MIC_BUFFER_CHUNKS * 2)
+        self.mic_buffer_unfiltered = queue.deque(maxlen=MIC_BUFFER_CHUNKS * 2)
         self.playback_queue = queue.Queue()
         self.playback_buffer = PlaybackBuffer(RATE)
         self.playback_buffer_lock = threading.Lock()
@@ -84,7 +87,7 @@ class AudioDevice:
 
                 filtered_frame = self._filter_frame(mic_frame)
                 with self.mic_lock:
-                    self.mic_buffer_2.append(mic_frame)
+                    self.mic_buffer_unfiltered.append(mic_frame)
                     if len(self.mic_buffer) == self.mic_buffer.maxlen:
                         self.read_did_overflow = True
                     self.mic_buffer.append(filtered_frame.as_array())
@@ -96,12 +99,6 @@ class AudioDevice:
 
     def _start_playback_thread(self):
         def playback_worker():
-            # Initialize playback history with 1s of silence
-            silence = b"\x00" * CHUNK * pyaudio.get_sample_size(FORMAT)
-            silence = AudioData(silence)
-            for _ in range(RATE // CHUNK):
-                self.playback_buffer.append(silence)
-
             MAX_BUFFER_AGE = 3  # seconds
 
             with TimeThis("Playback thread init"):
@@ -121,12 +118,17 @@ class AudioDevice:
                         timestamp = self.playback_last_frame_time
 
                     frame_data = AudioData(frames, timestamp=timestamp)
+                    logger.debug(f"Playback Frame: {frame_data.timestamp:.3f} - {frame_data.end_time():.3f}")
                     self.playback_last_frame_time = frame_data.end_time()
                     with self.playback_buffer_lock:
                         self.playback_buffer.append(frame_data)
                         self.playback_buffer.prune_older_than(time.perf_counter() - MAX_BUFFER_AGE)
                     stream.write(frames)
-                    #time.sleep(frame_data.duration())
+
+                    time_to_next_frame = frame_data.end_time() - time.perf_counter()
+                    sleep_time = max(0, time_to_next_frame - 0.01)
+                    logger.debug(f"Playback Sleep: {sleep_time:.3f} sec")
+                    time.sleep(sleep_time)
                 except queue.Empty:
                     continue
             stream.stop_stream()
@@ -145,24 +147,39 @@ class AudioDevice:
         with self.playback_buffer_lock:
             np_playback = self.playback_buffer.extract_frames(frame_start, len(mic_frame))
 
+        # Print mic average volume
+        mic_avg = np.mean(np.abs(mic_frame.as_array()))
+        logger.debug(f"\nMic Frame: {mic_frame.timestamp:.3f} - {mic_frame.end_time():.3f} ({mic_avg:.1f})")
+
         if np.all(np_playback == 0):
+            logger.debug(f"No playback found for this window")
+            logger.debug(f"  Window: {frame_start:.3f} - {frame_end:.3f}")
+            logger.debug(f"  Delay: {self.delay:.3f} sec")
+            
+            with self.playback_buffer_lock:
+               str = self.playback_buffer.dump_windows("    ")
+               logger.debug(str)
             return mic_frame
+        
         
         # Convert to float32 for processing
         np_mic = mic_frame.as_array(np.float32)
         np_playback = np_playback.astype(np.float32)
 
+        playback_avg = np.mean(np.abs(np_playback))
+        logger.debug(f"Playback: {frame_start:.3f} - {frame_end:.3f} ({playback_avg:.1f})")
+
         # Ensure signals are same length
         min_length = min(len(np_playback), len(np_mic))
         if len(np_playback) < min_length:
-            print("Playback history is shorter than mic frame")
+            logger.info("Playback history is shorter than mic frame")
         if len(np_mic) < min_length:
-            print("Mic frame is shorter than playback history")
+            logger.info("Mic frame is shorter than playback history")
         np_mic = np_mic[:min_length]
         np_playback = np_playback[:min_length]
 
         if min_length < nperseg:
-            print("Insufficient data for STFT", len(np_playback), len(np_mic))
+            logger.warning("Insufficient data for STFT", len(np_playback), len(np_mic))
             return mic_frame
 
         # Short-time Fourier Transform - Transform to frequency domain
@@ -182,7 +199,7 @@ class AudioDevice:
         _, cleaned_time = istft(cleaned_spectrum, fs=RATE, nperseg=nperseg, noverlap=noverlap)
 
         if np.any(np.isnan(cleaned_time)):
-            print("NaNs in ISTFT output")
+            logger.warning("NaNs in ISTFT output")
             return mic_frame
 
         # Clip the cleaned audio to the range of int16 and convert back to original format
@@ -217,15 +234,19 @@ class AudioDevice:
 
     def play(self, audio_data):
         if isinstance(audio_data, AudioData):
-            audio_data = audio_data.get_bytes()
+            audio_data = audio_data.as_bytes()
 
         sample_size = pyaudio.get_sample_size(FORMAT)
         chunk_bytes = CHUNK * sample_size
         total_length = len(audio_data)
         
+        chunks_queued = 0
         for i in range(0, total_length, chunk_bytes):
             chunk = audio_data[i:i + chunk_bytes]
             self.playback_queue.put(chunk)
+            chunks_queued += 1
+
+        logger.debug(f"Queued {chunks_queued} chunks for playback")
 
     def stop(self):
         self.running = False
@@ -289,11 +310,14 @@ if __name__ == "__main__":
             self.fade = fade
 
         def play(self, device):
+            device.play(self.render())
+            time.sleep(self.duration)
+
+        def render(self):
             if self.fade is None:
                 self.fade = self.duration / 3
                 self.fade = 0
-            device.play(self.generate_tone(self.freq, self.duration, self.fade))
-            time.sleep(self.duration)
+            return self.generate_tone(self.freq, self.duration, self.fade)
 
         # Generate tone
         def generate_tone(self, freq, duration, end_fade=0.25):
@@ -424,22 +448,21 @@ if __name__ == "__main__":
             from scipy.signal import correlate, spectrogram
 
             playback_signal = generate_chirp(duration=1/6, f0=100, f1=7000)
-            print(f"Playing chirp signal... {len(playback_signal)//pyaudio.get_sample_size(FORMAT)} frames")
+            print(f"Measure: Playing chirp signal... {len(playback_signal)//pyaudio.get_sample_size(FORMAT)} frames")
             device.play(playback_signal)
 
-            print(f"Frame Count: {frame_count}")
             with device.mic_lock:
-                print("Clearing mic 2 buffer")
-                device.mic_buffer_2.clear()
+                print("Measure: Clearing unfiltered mic buffer")
+                device.mic_buffer_unfiltered.clear()
 
             # Sleep to allow response (10 chunks @ 16kHz with CHUNK=1024 ≈ 640ms)
-            with TimeThis("Waiting for mic buffer to fill"):
+            with TimeThis(f"Measure: Waiting for {frame_count} frames"):
                 time.sleep((CHUNK * frame_count) / RATE)
 
             # Grab the next N chunks after the chirp
             with device.mic_lock:
-                print(f"Mic buffer size: {len(device.mic_buffer_2)}")
-                mic_chunks = list(device.mic_buffer_2)[:frame_count] 
+                print(f"Measure: Unfiltered Mic Buffer Size: {len(device.mic_buffer_unfiltered)}")
+                mic_chunks = list(device.mic_buffer_unfiltered)[:frame_count] 
 
             # Concatenate mic audio and get time window
             array_chunks = [chunk.as_array() for chunk in mic_chunks]
@@ -606,6 +629,19 @@ if __name__ == "__main__":
         # device.set_sample_delay(delay + 135)
         device.set_sample_delay(delay)
 
+        beep = AudioData(Tone("A4", 0.25).render())
+        print(f"Beep: {len(beep)//pyaudio.get_sample_size(FORMAT)} frames")
+        device.play(beep)
+        print(f"Recording beep...")
+        audio = record(device, beep.duration() + 0.25)
+        time.sleep(0.5)
+        print("Playing back recording...")
+        device.play(audio)
+
+        time.sleep(AudioData(audio).duration())
+        time.sleep(2)
+
+        print("Playing sample...")
         device.play(sample)
         audio = record(device, sample_data.duration() + 1)
 
@@ -615,6 +651,8 @@ if __name__ == "__main__":
         print(f"Audio: {len(audio)//pyaudio.get_sample_size(FORMAT)} frames")
         device.play(audio)
         time.sleep(AudioData(audio).duration() + 0.5)
+
+        return
 
         time.sleep(5)
         from pathlib import Path
