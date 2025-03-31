@@ -171,6 +171,10 @@ class AudioData:
         if not timestamp:
             self.timestamp = time.perf_counter()
 
+    def as_bytes(self) -> bytes:
+        """ Return raw audio bytes """
+        return self.frames
+    
     def as_array(self, dtype=None) -> np.ndarray:
         """ Convert bytes to numpy array """
         sample_dtype = self.get_np_type()
@@ -295,3 +299,26 @@ class PlaybackBuffer:
             output[out_start_idx:out_start_idx + copy_len] = chunk_data[in_start_idx:in_start_idx + copy_len]
 
         return output
+
+    def dump_windows(self, prefix=""):
+        """
+        Print the start and end times of each series of contiguous chunks of audio data
+        """
+        if len(self.chunks) == 0:
+            print(f"{prefix}No audio data")
+            return
+
+        start_time = self.chunks[0].timestamp
+        end_time = self.chunks[0].end_time()
+        chunk_count = 1
+
+        for chunk in self.chunks[1:]:
+            # Check for a gap of more than a single sample
+            if end_time - chunk.timestamp >= (2/self.rate):
+                print(f"{prefix}Playback Window: {start_time:.3f} - {end_time:.3f} [{chunk_count} chunks]")
+                start_time = chunk.timestamp
+                chunk_count = 1
+            chunk_count += 1
+            end_time = max(end_time, chunk.end_time())
+
+        print(f"{prefix}Playback Window: {start_time:.3f} - {end_time:.3f} [{chunk_count} chunks]")
