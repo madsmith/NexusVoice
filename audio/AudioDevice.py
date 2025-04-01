@@ -9,7 +9,7 @@ import numpy as np
 import threading
 import queue
 import time
-from scipy.signal import stft, istft, chirp, spectrogram
+from scipy.signal import stft, istft
 
 logger = logging.getLogger(__name__)
 
