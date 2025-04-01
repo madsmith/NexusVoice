@@ -345,6 +345,7 @@ def main():
     time.sleep(AudioData(audio).duration() + 0.5)
 
     return
+
     time.sleep(5)
     from audio.utils import save_recording  # Make sure this is imported
 
@@ -369,42 +370,6 @@ def main():
         #if offset > 0:
         #    test_delay(base_delay, -offset)
         
-    
-
-    # def record_then_playback():
-    #     while True:
-    #         d = 2
-    #         # Record 2s of audio
-    #         print("Recording...")
-    #         recorded = []
-    #         for _ in range(d * RATE // CHUNK):
-    #             recorded.append(device.read())
-    #         recorded = np.concatenate(recorded)
-    #         print("Recording complete")
-
-    #         time.sleep(1)
-
-    #         # Play back recorded audio
-    #         print("Playing back recorded audio...")
-    #         device.play(recorded)
-    #         print("Playback complete")
-    #         time.sleep(d)
-
-    # def play_music_every(duration):
-    #     while True:
-    #         time.sleep(5)
-    #         print("Playing music...")
-    #         play_music(device)
-    #         time.sleep(duration)
-
-    # play_thread = threading.Thread(target=play_music_every, args=(14,), daemon=True)
-    # listen_thread = threading.Thread(target=record_then_playback, daemon=True)
-
-    # play_thread.start()
-    # listen_thread.start()
-
-    # play_thread.join()
-        # listen_thread.join()
 
 
 if __name__ == "__main__":
