@@ -5,6 +5,8 @@ BASE_DIR = Path(__file__).resolve().parent
 ROOT_DIR = BASE_DIR.parent
 sys.path.append(str(ROOT_DIR))
                 
+import matplotlib.pyplot as plt
+from math import ceil
 import numpy as np
 import pyaudio
 from scipy.signal import chirp, correlate, spectrogram
@@ -21,7 +23,6 @@ CHUNK = 1024
 FORMAT = pyaudio.paInt16
 CHANNELS = 1
 VOLUME = 0.5
-
 
 def play_music(device):
     duration = 0.7
@@ -128,7 +129,6 @@ def measure_delay_from_buffers(device, frame_count=10, with_plot=False):
         delay_samples (int), correlation_score (float)
     """
     import numpy as np
-    import matplotlib.pyplot as plt
     from scipy.signal import correlate, spectrogram
 
     playback_signal = generate_chirp(duration=1/6, f0=100, f1=7000)
@@ -260,7 +260,6 @@ def record(device, duration):
     # Record 2s of audio
     print("Recording...")
     recorded = []
-    from math import ceil
     for _ in range(ceil(duration * RATE / CHUNK)):
         recorded.append(device.read())
     recorded = np.concatenate(recorded).astype(np.int16).tobytes()
@@ -295,10 +294,6 @@ def plot_mic_and_signal(mic_audio, chirp_array, corr, rate=16000):
     plt.show()
 
 def main():
-
-    
-    import matplotlib.pyplot as plt
-
 
     sample = load_wav(BASE_DIR / "resources" / "test_ai_response_short.wav")
     sample_data = AudioData(sample)
