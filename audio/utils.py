@@ -12,7 +12,7 @@ from config import (
     AUDIO_CHANNELS
 )
 
-from bytes import ByteRingBuffer
+from utils.bytes import ByteRingBuffer
 
 logger = logging.getLogger(__name__)
 
