@@ -1,3 +1,8 @@
+import sys
+from pathlib import Path
+
+sys.path.append(str(Path(__file__).resolve().parents[1]))
+
 import pyaudio
 import logging
 import numpy as np
@@ -8,8 +13,8 @@ from scipy.signal import stft, istft, chirp, spectrogram
 
 logger = logging.getLogger(__name__)
 
-from audio_utils import AudioData, PlaybackBuffer, save_recording
-from debug import TimeThis
+from audio.utils import AudioData, PlaybackBuffer, save_recording
+from utils.debug import TimeThis
 
 RATE = 16000
 CHUNK = 1024
@@ -623,7 +628,7 @@ if __name__ == "__main__":
 
         capture_frames = int(0.5 * RATE) // CHUNK
         capture_frames = 10
-        delay, score = measure_delay_from_buffers(device, capture_frames, with_plot=False)
+        delay, score = measure_delay_from_buffers(device, capture_frames, with_plot=True)
         print("Score:", score)
         print("Delay:", delay)
         # device.set_sample_delay(delay + 135)
@@ -652,31 +657,30 @@ if __name__ == "__main__":
         device.play(audio)
         time.sleep(AudioData(audio).duration() + 0.5)
 
-        return
-
         time.sleep(5)
         from pathlib import Path
-        from audio_utils import save_recording  # Make sure this is imported
+        from audio.utils import save_recording  # Make sure this is imported
 
         base_delay = delay  # your calculated delay
 
-        def test_delay(d):
-            device.set_sample_delay(d)
-            print(f"Testing delay: {d}")
+        def test_delay(delay, offset):
+            new_delay = delay + offset
+            device.set_sample_delay(new_delay)
+            print(f"Testing delay: {offset}")
             device.play(sample)
 
             recording = record(device, sample_data.duration() + 1)
-            sign_char = "+" if d >= 0 else ""
-            filename = Path(f"samples/delay{sign_char}{d}.wav")
+            sign_char = "+" if offset >= 0 else ""
+            filename = Path(f"samples/delay{sign_char}{offset}.wav")
             save_recording(recording, filename)
             time.sleep(0.5)
             device.reset_microphone()
 
-
-        for offset in range(0, 500, 5):
-            test_delay(offset)
-            if offset > 0:
-                test_delay(-offset)
+        base_delay = -2559
+        for offset in range(275, 320, 1):
+            test_delay(base_delay, offset)
+            #if offset > 0:
+            #    test_delay(base_delay, -offset)
             
         
 

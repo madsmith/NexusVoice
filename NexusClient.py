@@ -13,7 +13,7 @@ import silero_vad
 import torch
 
 
-from audio_utils import AudioBuffer, AudioRingBuffer
+from audio.utils import AudioBuffer, AudioRingBuffer
 from config import (
     AUDIO_FORMAT,
     NUMPY_AUDIO_FORMAT,
