@@ -248,6 +248,9 @@ class AudioDevice:
                     if self.active_chunk_position + frame_count >= len(self.active_chunk):
                         self.active_chunk = None
                         self.active_chunk_position = 0
+
+                    # Update the active chunk position
+                    self.active_chunk_position += frame_count
                     
                     result.append(segment)
                     frames_remaining -= frame_count
