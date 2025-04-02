@@ -5,6 +5,7 @@ sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 import pyaudio
 import logging
+from math import ceil
 import numpy as np
 import threading
 import queue
@@ -31,15 +32,18 @@ class AudioDevice:
         
         self.mic_buffer = queue.deque(maxlen=MIC_BUFFER_CHUNKS)
         self.mic_buffer_unfiltered = queue.deque(maxlen=MIC_BUFFER_CHUNKS * 2)
-        self.playback_queue = queue.Queue()
-        self.playback_buffer = PlaybackBuffer(RATE)
-        self.playback_buffer_lock = threading.Lock()
         self.mic_lock = threading.Lock()
         self.mic_buffer_ready = threading.Condition(self.mic_lock)
         self.mic_ready = threading.Event()
-        self.playback_ready = threading.Event()
         self.read_in_progress = False
         self.read_did_overflow = False
+        self.active_chunk = None
+        self.active_chunk_position = 0
+
+        self.playback_queue = queue.Queue()
+        self.playback_buffer = PlaybackBuffer(RATE)
+        self.playback_buffer_lock = threading.Lock()
+        self.playback_ready = threading.Event()        
         self.playback_is_playing = False
         self.playback_last_frame_time = 0
 
@@ -47,7 +51,8 @@ class AudioDevice:
         self.filtered = True
         self.delay = 0
         
-        self.mic_warmup_frames = 2
+        # Discard the first few microphone frames as the microphone subsystem warms up
+        self._mic_warmup_frames = 1024 * 3
 
         self._start_mic_thread()
         self._start_playback_thread()
@@ -82,8 +87,9 @@ class AudioDevice:
                 mic_frame = AudioData(stream.read(CHUNK, exception_on_overflow=False))
 
                 # Discard the first few frames as the microphone subsystem warms up
-                if self.mic_warmup_frames > 0:
-                    self.mic_warmup_frames -= 1
+                if self._mic_warmup_frames > 0:
+                    logger.debug(f"Discarding warmup frame {len(mic_frame)} bytes: Mean: {np.mean(np.abs(mic_frame.as_array())):.2f}")
+                    self._mic_warmup_frames -= len(mic_frame)
                     continue
 
                 # Notify that the microphone is ready
@@ -95,6 +101,11 @@ class AudioDevice:
                     self.mic_buffer_unfiltered.append(mic_frame)
                     if len(self.mic_buffer) == self.mic_buffer.maxlen:
                         self.read_did_overflow = True
+                        # Discard active chunk as it's stale
+                        if self.active_chunk:
+                            self.active_chunk = None
+                            self.active_chunk_position = 0
+
                     self.mic_buffer.append(filtered_frame.as_array())
                     self.mic_buffer_ready.notify_all()
             stream.stop_stream()
@@ -215,27 +226,75 @@ class AudioDevice:
 
         return AudioData(cleaned_clip, format=mic_frame.format, channels=mic_frame.channels, rate=mic_frame.rate)
 
-    def read(self):
-        with self.mic_buffer_ready:
-            # Wait for a frame to be available
-            while len(self.mic_buffer) == 0:
-                self.mic_buffer_ready.wait()
+    def read(self, size: int = CHUNK) -> np.ndarray:
+        result = []
+        frames_remaining = size
 
-            if self.read_in_progress and not self.read_did_overflow:
-                return self.mic_buffer.popleft()
-            else:
-                self.read_in_progress = True
-                if self.read_did_overflow:
-                    # TODO: alert the overflow to caller
-                    self.read_did_overflow = False
-                self.read_did_overflow = False
-                last_chunk = self.mic_buffer.pop()
-                self.mic_buffer.clear()
-                return last_chunk
+        if size <= 0:
+            raise ValueError("Size must be greater than 0")
+        
+        with self.mic_buffer_ready:
+            while frames_remaining > 0:
+                # If we have an active chunk, copy from it
+                # The existance of an active chunk implies we're reading and have not
+                # overflowed the buffer.
+                if self.active_chunk is not None:
+                    # Copy from the active chunk
+                    frames_available = len(self.active_chunk) - self.active_chunk_position
+                    frame_count = min(frames_remaining, frames_available)
+                    segment = self.active_chunk[self.active_chunk_position : self.active_chunk_position + frame_count]
+
+                    # Is the active chunk exhausted?
+                    if self.active_chunk_position + frame_count >= len(self.active_chunk):
+                        self.active_chunk = None
+                        self.active_chunk_position = 0
+                    
+                    result.append(segment)
+                    frames_remaining -= frame_count
+                else:
+                    # We need more chunks
+                    while len(self.mic_buffer) == 0:
+                        # Wait for a signal that a chunk is ready
+                        self.mic_buffer_ready.wait()
+
+                    # Are we reading and current with the buffer?
+                    if self.read_in_progress and not self.read_did_overflow:
+                        self.active_chunk = self.mic_buffer.popleft()
+                    elif not self.read_in_progress:
+                        # Start with the most recent chunk
+                        self.active_chunk = self.mic_buffer.pop()
+                        self.mic_buffer.clear()
+                        self.mic_buffer_unfiltered.clear()
+                    else:
+                        # TODO: communicate buffer overflow to caller
+                        logger.warning("Read Buffer overflow detected, discarding frames")
+                        # On an overflow discard as many frames as possible to
+                        # catch up with the requested frames
+                        chunks_needed = ceil(frames_remaining / CHUNK)
+
+                        # Grab the rightmost chunks_needed chunks
+                        chunks = list(self.mic_buffer)[-chunks_needed:]
+                        self.mic_buffer.clear()
+                        self.mic_buffer_unfiltered.clear()
+
+                        temp_chunk = np.concatenate(chunks)
+
+                        # Place the last frames_remaining frames in the active chunk
+                        self.active_chunk = temp_chunk[-frames_remaining:]
+                        self.active_chunk_position = 0
+
+                        # Clear overflow
+                        self.read_did_overflow = False
+
+                    self.read_in_progress = True
+
+            return np.concatenate(result)
 
     def reset_microphone(self):
         with self.mic_lock:
             self.mic_buffer.clear()
+            self.mic_buffer_unfiltered.clear()
+            self.read_in_progress = False
 
     def play(self, audio_data):
         if isinstance(audio_data, AudioData):
