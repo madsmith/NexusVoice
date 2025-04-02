@@ -168,7 +168,18 @@ def save_recording_mp3(recording, filename):
     if not filename.parent.exists():
         filename.parent.mkdir(parents=True, exist_ok=True)
 
-    if not isinstance(recording, AudioSegment):
+    if isinstance(recording, AudioBuffer):
+        frames = recording.get_bytes()
+        sample_rate = recording.get_sample_rate()
+        format = recording.get_audio_format()
+        channels = recording.get_channels()
+        recording = AudioSegment(
+            data=frames,
+            sample_width=pyaudio.get_sample_size(format),
+            frame_rate=sample_rate,
+            channels=channels
+        )
+    elif not isinstance(recording, AudioSegment):
         recording = AudioSegment(
             data=recording,
             sample_width=pyaudio.get_sample_size(AUDIO_FORMAT),
