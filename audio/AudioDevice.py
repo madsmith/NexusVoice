@@ -1,6 +1,8 @@
 import sys
 from pathlib import Path
 
+from utils.arrays import abbreviate_data
+
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 import pyaudio
@@ -48,6 +50,7 @@ class AudioDevice:
         self.playback_last_frame_time = 0
 
         self.running = True
+        self._filtered = True
         self.filtered = True
         self.delay = 0
         
@@ -66,6 +69,9 @@ class AudioDevice:
 
     def set_sample_delay(self, delay):
         self.delay = delay / RATE
+
+    def set_filter_mode(self, mode):
+        self._filtered = bool(mode)
 
     def _find_devices(self):
         for i in range(self.audio.get_device_count()):
@@ -96,7 +102,11 @@ class AudioDevice:
                 if not self.mic_ready.is_set():
                     self.mic_ready.set()
 
-                filtered_frame = self._filter_frame(mic_frame)
+                if self._filtered:
+                    filtered_frame = self._filter_frame(mic_frame)
+                else:
+                    filtered_frame = mic_frame
+                    
                 with self.mic_lock:
                     self.mic_buffer_unfiltered.append(mic_frame)
                     if len(self.mic_buffer) == self.mic_buffer.maxlen:
@@ -248,10 +258,10 @@ class AudioDevice:
                     if self.active_chunk_position + frame_count >= len(self.active_chunk):
                         self.active_chunk = None
                         self.active_chunk_position = 0
+                    else:
+                        # Update the active chunk position
+                        self.active_chunk_position += frame_count
 
-                    # Update the active chunk position
-                    self.active_chunk_position += frame_count
-                    
                     result.append(segment)
                     frames_remaining -= frame_count
                 else:
@@ -298,6 +308,7 @@ class AudioDevice:
             self.mic_buffer.clear()
             self.mic_buffer_unfiltered.clear()
             self.read_in_progress = False
+            self.read_did_overflow = False
 
     def play(self, audio_data):
         if isinstance(audio_data, AudioData):
