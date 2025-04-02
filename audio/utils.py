@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from collections import deque
 import logging
+from pathlib import Path
 import numpy as np
 import pyaudio
 from pydub import AudioSegment
@@ -24,6 +25,18 @@ class AudioBufferBase(ABC):
         self._channels = channels
         self._frame_size = pyaudio.get_sample_size(audio_format) * self._channels
 
+    def get_channels(self):
+        return self._channels
+    
+    def get_sample_rate(self):
+        return self._sample_rate
+    
+    def get_audio_format(self):
+        return self._audio_format
+    
+    def get_sample_size(self):
+        return pyaudio.get_sample_size(self._audio_format)
+
     @abstractmethod
     def append(self, chunk):
         pass
@@ -39,6 +52,9 @@ class AudioBufferBase(ABC):
     @abstractmethod
     def clear(self):
         pass
+
+    def __len__(self):
+        return self.frame_count()
 
     def frame_count(self):
         return self.byte_count() // self._frame_size
@@ -117,22 +133,40 @@ class AudioRingBuffer(AudioBufferBase):
         self.buffer.clear()
 
 def save_recording(recording, filename):
+    if isinstance(filename, str):
+        filename = Path(filename)
+
     if not filename.parent.exists():
         filename.parent.mkdir(parents=True, exist_ok=True)
 
+    if isinstance(recording, AudioBuffer):
+        frames = recording.get_bytes()
+        sample_rate = recording.get_sample_rate()
+        format = recording.get_audio_format()
+        channels = recording.get_channels()
+    else:
+        frames = recording
+        sample_rate = AUDIO_SAMPLE_RATE
+        format = AUDIO_FORMAT
+        channels = AUDIO_CHANNELS
+
+    sample_width = pyaudio.get_sample_size(format)
+
     # Create wave file from audio bytes using pyaudio
     with wave.open(str(filename), "wb") as wave_file:
-        wave_file.setnchannels(AUDIO_CHANNELS)
-        wave_file.setsampwidth(pyaudio.get_sample_size(AUDIO_FORMAT))
-        wave_file.setframerate(AUDIO_SAMPLE_RATE)
-        wave_file.writeframes(recording)
+        wave_file.setnchannels(channels)
+        wave_file.setsampwidth(sample_width)
+        wave_file.setframerate(sample_rate)
+        wave_file.writeframes(frames)
     
     logger.info(f"Recording saved to {filename}")
 
 def save_recording_mp3(recording, filename):
+    if isinstance(filename, str):
+        filename = Path(filename)
+
     if not filename.parent.exists():
         filename.parent.mkdir(parents=True, exist_ok=True)
-
 
     if not isinstance(recording, AudioSegment):
         recording = AudioSegment(
