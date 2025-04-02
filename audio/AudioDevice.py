@@ -165,7 +165,7 @@ class AudioDevice:
 
         # Log mic average volume
         mic_avg = np.mean(np.abs(mic_frame.as_array()))
-        logger.debug(f"\nMic Frame: {mic_frame.timestamp:.3f} - {mic_frame.end_time():.3f} ({mic_avg:.1f})")
+        logger.debug(f"Mic Frame: {mic_frame.timestamp:.3f} - {mic_frame.end_time():.3f} ({mic_avg:.1f})")
 
         if np.all(np_playback == 0):
             logger.debug(f"No playback found for this window")
