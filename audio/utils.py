@@ -87,6 +87,9 @@ class AudioBuffer(AudioBufferBase):
         self.chunks = []
 
     def append(self, chunk):
+        if isinstance(chunk, np.ndarray):
+            chunk = chunk.tobytes()
+
         chunk_size = len(chunk)
         if chunk_size % self._frame_size != 0:
             logger.warning(f"Chunk size {chunk_size} is not a multiple of frame size {self._frame_size}")
@@ -121,6 +124,8 @@ class AudioRingBuffer(AudioBufferBase):
         self.buffer = ByteRingBuffer(buffer_size)
 
     def append(self, chunk):
+        if isinstance(chunk, np.ndarray):
+            chunk = chunk.tobytes()
         self.buffer.append(chunk)
 
     def get_bytes(self):
