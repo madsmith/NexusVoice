@@ -199,6 +199,7 @@ def save_recording_mp3(recording, filename):
     logger.info(f"Recording saved to {filename}")
 
 
+
 # Below is a seperate implementation the resembles some of the above features
 # I should consolidate these into a more coherent approach at some point.
 
@@ -263,6 +264,38 @@ class AudioData:
             return np.float64
         else:
             raise ValueError(f"Unsupported sample size {sample_size}")
+
+    @classmethod
+    def sample_width_to_format(cls, sample_width: int):
+        if sample_width == 1:
+            return pyaudio.paInt8
+        elif sample_width == 2:
+            return pyaudio.paInt16
+        elif sample_width == 4:
+            return pyaudio.paInt32
+        elif sample_width == 8:
+            return pyaudio.paFloat64
+        else:
+            raise ValueError(f"Unsupported sample width {sample_width}")
+
+    @classmethod
+    def from_wave(cls, filename):
+        if isinstance(filename, Path):
+            filename = str(filename)
+
+        audio = pyaudio.PyAudio()
+        with wave.open(filename, 'rb') as wf:
+            sample_width = wf.getsampwidth()
+            frame_bytes = wf.readframes(wf.getnframes())
+            audio_data = cls(
+                frame_bytes,
+                format=cls.sample_width_to_format(sample_width),
+                channels=wf.getnchannels(),
+                rate=wf.getframerate()
+            )
+        audio.terminate()
+
+        return audio_data
 
 class PlaybackBuffer:
     def __init__(self, rate: int):

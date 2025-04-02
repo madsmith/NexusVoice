@@ -1,24 +1,24 @@
 import logging
-import numpy as np
 import pyaudio
 import silero_vad
-import time
 import torch
 
 from audio.AudioDevice import AudioDevice
 from audio.utils import AudioBuffer, AudioData, save_recording, save_recording_mp3
-from utils.arrays import abbreviate_data
-from utils.debug import TimeThis
 
 logger = logging.getLogger(__name__)
 #logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - '%(message)s'")
 
 AUDIO_FORMAT = pyaudio.paInt16
 SILERO_VAD_AUDIO_CHUNK = 512
-    
+RATE = 16000
+CHANNELS = 1
+
 def main():
     # Initialize the AudioDevice
     device = AudioDevice()
+    device.set_sample_delay(-2200)
+    device.reset_microphone()
 
     # Initialize the Silero VAD
     vad_model = silero_vad.load_silero_vad()
@@ -44,7 +44,7 @@ def main():
             is_recording = True
             pause_duration = 0
         else:
-            pause_duration += read_size / 16000
+            pause_duration += read_size / RATE
 
         if is_recording:
             speech_buffer.append(chunk)
@@ -53,9 +53,9 @@ def main():
                 save_recording(speech_buffer, "speech.wav")
                 save_recording_mp3(speech_buffer, "speech.mp3")
                 print("Recording saved.")
-                # print("Playing back recording...")
-                # recording = AudioData(speech_buffer.get_frames(), AUDIO_FORMAT)
-                # device.play(recording)
+                print("Playing back recording...")
+                recording = AudioData(speech_buffer.get_frames(), AUDIO_FORMAT)
+                device.play(recording)
                 # time.sleep(recording.duration() + 0.5)
                 speech_buffer.clear()
                 device.reset_microphone()
