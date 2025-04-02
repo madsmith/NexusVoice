@@ -102,7 +102,7 @@ class AudioDevice:
                     if len(self.mic_buffer) == self.mic_buffer.maxlen:
                         self.read_did_overflow = True
                         # Discard active chunk as it's stale
-                        if self.active_chunk:
+                        if self.active_chunk is not None:
                             self.active_chunk = None
                             self.active_chunk_position = 0
 
