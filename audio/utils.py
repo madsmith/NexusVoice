@@ -21,11 +21,11 @@ AUDIO_FORMAT = pyaudio.paInt16
 CHANNELS = 1
 
 class AudioBufferBase(ABC):
-    def __init__(self, sample_rate=SAMPLE_RATE, audio_format=AUDIO_FORMAT, channels=CHANNELS):
+    def __init__(self, sample_rate=SAMPLE_RATE, format=AUDIO_FORMAT, channels=CHANNELS):
         self._sample_rate = sample_rate
-        self._audio_format = audio_format
+        self._audio_format = format
         self._channels = channels
-        self._frame_size = pyaudio.get_sample_size(audio_format) * self._channels
+        self._frame_size = pyaudio.get_sample_size(format) * self._channels
 
     def get_channels(self):
         return self._channels
@@ -84,8 +84,8 @@ class AudioBufferBase(ABC):
             raise ValueError(f"Unsupported frame size {self._frame_size}")
 
 class AudioBuffer(AudioBufferBase):
-    def __init__(self, sample_rate=SAMPLE_RATE, audio_format=AUDIO_FORMAT, channels=CHANNELS):
-        super().__init__(sample_rate, audio_format, channels)
+    def __init__(self, sample_rate=SAMPLE_RATE, format=AUDIO_FORMAT, channels=CHANNELS):
+        super().__init__(sample_rate=sample_rate, format=format, channels=channels)
         self.chunks = []
 
     def append(self, chunk):
@@ -119,8 +119,8 @@ class AudioBuffer(AudioBufferBase):
             raise ValueError(f"Unsupported frame size {self._frame_size}")
 
 class AudioRingBuffer(AudioBufferBase):
-    def __init__(self, sample_rate=SAMPLE_RATE, audio_format=AUDIO_FORMAT, channels=CHANNELS, max_duration=1.0):
-        super().__init__(sample_rate, audio_format, channels)
+    def __init__(self, sample_rate=SAMPLE_RATE, format=AUDIO_FORMAT, channels=CHANNELS, max_duration=1.0):
+        super().__init__(sample_rate=sample_rate, format=format, channels=channels)
         self.max_duration = max_duration
         buffer_size = int(max_duration * sample_rate * self._frame_size)
         self.buffer = ByteRingBuffer(buffer_size)
