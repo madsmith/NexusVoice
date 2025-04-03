@@ -6,22 +6,24 @@ import numpy as np
 import pyaudio
 from pydub import AudioSegment
 import wave
+import sys
 
-from config import (
-    AUDIO_FORMAT,
-    AUDIO_SAMPLE_RATE,
-    AUDIO_CHANNELS
-)
+BASE_DIR = Path(__file__).resolve().parent
+ROOT_DIR = BASE_DIR.parent
+sys.path.append(str(ROOT_DIR))
 
 from utils.bytes import ByteRingBuffer
 
 logger = logging.getLogger(__name__)
 
+SAMPLE_RATE = 16000
+AUDIO_FORMAT = pyaudio.paInt16
+CHANNELS = 1
 
 class AudioBufferBase(ABC):
-    def __init__(self, audio_format, sample_rate=AUDIO_SAMPLE_RATE, channels=AUDIO_CHANNELS):
-        self._audio_format = audio_format
+    def __init__(self, sample_rate=SAMPLE_RATE, audio_format=AUDIO_FORMAT, channels=CHANNELS):
         self._sample_rate = sample_rate
+        self._audio_format = audio_format
         self._channels = channels
         self._frame_size = pyaudio.get_sample_size(audio_format) * self._channels
 
@@ -82,8 +84,8 @@ class AudioBufferBase(ABC):
             raise ValueError(f"Unsupported frame size {self._frame_size}")
 
 class AudioBuffer(AudioBufferBase):
-    def __init__(self, audio_format, sample_rate=AUDIO_SAMPLE_RATE, channels=AUDIO_CHANNELS):
-        super().__init__(audio_format, sample_rate, channels)
+    def __init__(self, sample_rate=SAMPLE_RATE, audio_format=AUDIO_FORMAT, channels=CHANNELS):
+        super().__init__(sample_rate, audio_format, channels)
         self.chunks = []
 
     def append(self, chunk):
@@ -117,8 +119,8 @@ class AudioBuffer(AudioBufferBase):
             raise ValueError(f"Unsupported frame size {self._frame_size}")
 
 class AudioRingBuffer(AudioBufferBase):
-    def __init__(self, audio_format, sample_rate=AUDIO_SAMPLE_RATE, channels=AUDIO_CHANNELS, max_duration=1.0):
-        super().__init__(audio_format, sample_rate, channels)
+    def __init__(self, sample_rate=SAMPLE_RATE, audio_format=AUDIO_FORMAT, channels=CHANNELS, max_duration=1.0):
+        super().__init__(sample_rate, audio_format, channels)
         self.max_duration = max_duration
         buffer_size = int(max_duration * sample_rate * self._frame_size)
         self.buffer = ByteRingBuffer(buffer_size)
@@ -151,9 +153,9 @@ def save_recording(recording, filename):
         channels = recording.get_channels()
     else:
         frames = recording
-        sample_rate = AUDIO_SAMPLE_RATE
+        sample_rate = SAMPLE_RATE
         format = AUDIO_FORMAT
-        channels = AUDIO_CHANNELS
+        channels = CHANNELS
 
     sample_width = pyaudio.get_sample_size(format)
 
@@ -188,8 +190,8 @@ def save_recording_mp3(recording, filename):
         recording = AudioSegment(
             data=recording,
             sample_width=pyaudio.get_sample_size(AUDIO_FORMAT),
-            frame_rate=AUDIO_SAMPLE_RATE,
-            channels=AUDIO_CHANNELS
+            frame_rate=SAMPLE_RATE,
+            channels=CHANNELS
         )
     
     with open(filename, "wb") as mp3_file:

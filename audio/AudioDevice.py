@@ -1,9 +1,9 @@
 import sys
 from pathlib import Path
 
-from utils.arrays import abbreviate_data
-
-sys.path.append(str(Path(__file__).resolve().parents[1]))
+BASE_DIR = Path(__file__).resolve().parent
+ROOT_DIR = BASE_DIR.parent
+sys.path.append(str(ROOT_DIR))
 
 import pyaudio
 import logging

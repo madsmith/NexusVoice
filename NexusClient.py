@@ -144,9 +144,9 @@ class NexusVoiceClient(threading.Thread):
             self.vad_model = silero_vad.load_silero_vad()
 
         def _initializeBuffers(self):
-            self.wake_word_buffer = AudioBuffer(AUDIO_FORMAT)
-            self.vad_buffer = AudioBuffer(AUDIO_FORMAT)
-            self.speech_buffer = AudioRingBuffer(AUDIO_FORMAT, max_duration=10.0)
+            self.wake_word_buffer = AudioBuffer(format=AUDIO_FORMAT)
+            self.vad_buffer = AudioBuffer(format=AUDIO_FORMAT)
+            self.speech_buffer = AudioRingBuffer(format=AUDIO_FORMAT, max_duration=10.0)
 
         def process_wake_word(self):
             while self.wake_word_buffer.frame_count() >= WAKE_WORD_FRAME_CHUNK:

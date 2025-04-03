@@ -1,7 +1,13 @@
 import logging
+from pathlib import Path
 import pyaudio
 import silero_vad
 import torch
+import sys
+
+BASE_DIR = Path(__file__).resolve().parent
+ROOT_DIR = BASE_DIR.parent
+sys.path.append(str(ROOT_DIR))
 
 from audio.AudioDevice import AudioDevice
 from audio.utils import AudioBuffer, AudioData, save_recording, save_recording_mp3
@@ -24,7 +30,7 @@ def main():
     vad_model = silero_vad.load_silero_vad()
 
     # Listen to the microphone
-    speech_buffer = AudioBuffer(AUDIO_FORMAT)
+    speech_buffer = AudioBuffer(format=AUDIO_FORMAT)
     is_recording = False
     speech_pause_duration = 0.5
     pause_duration = 0

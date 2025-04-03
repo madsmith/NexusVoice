@@ -60,11 +60,11 @@ class NexusVoice:
 
         self.open_audio_stream()
 
-        wake_word_buffer = AudioBuffer(AUDIO_FORMAT)
+        wake_word_buffer = AudioBuffer(format=AUDIO_FORMAT)
         #vad_buffer = AudioBuffer(AUDIO_FORMAT)
-        recording_buffer = AudioBuffer(AUDIO_FORMAT)
-        silero_vad_buffer = AudioBuffer(AUDIO_FORMAT)
-        ring_buffer = AudioRingBuffer(AUDIO_FORMAT, max_duration=10)
+        recording_buffer = AudioBuffer(format=AUDIO_FORMAT)
+        silero_vad_buffer = AudioBuffer(format=AUDIO_FORMAT)
+        ring_buffer = AudioRingBuffer(format=AUDIO_FORMAT, max_duration=10)
 
         is_recording = False
         is_listening = True
@@ -175,7 +175,7 @@ class NexusVoice:
                         if self.config.debug.save_recordings:
                             filename_mp3 = self._generate_filename("mp3")
                             # Add _buffered to filename
-                            alternative_buffer = AudioBuffer(AUDIO_FORMAT)
+                            alternative_buffer = AudioBuffer(format=AUDIO_FORMAT)
                             alternative_buffer.append(ring_buffer.get_bytes())
                             ring_buffer.clear()
                             alternative_buffer.append(recording)
