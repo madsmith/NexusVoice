@@ -23,17 +23,24 @@ RATE = 16000
 CHUNK = 1024
 CHANNELS = 1
 FORMAT = pyaudio.paInt16
+
 MIC_BUFFER_CHUNKS = 32
+MAX_PLAYBACK_BUFFER_AGE = 3  # seconds
 
 class AudioDevice:
-    def __init__(self):
+    def __init__(self, format=FORMAT, rate=RATE, channels=CHANNELS, chunk_size=CHUNK):
         self.audio = pyaudio.PyAudio()
         self.mic_index = -1
         self.speaker_index = -1
         self._find_devices()
+
+        self.format = format
+        self.rate = rate
+        self.channels = channels
+        self.chunk_size = chunk_size
         
         self.mic_buffer = queue.deque(maxlen=MIC_BUFFER_CHUNKS)
-        self.mic_buffer_unfiltered = queue.deque(maxlen=MIC_BUFFER_CHUNKS * 2)
+        self.mic_buffer_unfiltered = queue.deque(maxlen=MIC_BUFFER_CHUNKS)
         self.mic_lock = threading.Lock()
         self.mic_buffer_ready = threading.Condition(self.mic_lock)
         self.mic_ready = threading.Event()
@@ -43,7 +50,7 @@ class AudioDevice:
         self.active_chunk_position = 0
 
         self.playback_queue = queue.Queue()
-        self.playback_buffer = PlaybackBuffer(RATE)
+        self.playback_buffer = PlaybackBuffer(self.rate)
         self.playback_buffer_lock = threading.Lock()
         self.playback_ready = threading.Event()        
         self.playback_is_playing = False
@@ -68,7 +75,7 @@ class AudioDevice:
         self.delay = delay
 
     def set_sample_delay(self, delay):
-        self.delay = delay / RATE
+        self.delay = delay / self.rate
 
     def set_filter_mode(self, mode):
         self._filtered = bool(mode)
@@ -85,12 +92,12 @@ class AudioDevice:
         def mic_worker():
             with TimeThis("Mic thread init"):
                 stream = self.audio.open(
-                    format=FORMAT, channels=CHANNELS, rate=RATE,
-                    input=True, frames_per_buffer=CHUNK,
+                    format=self.format, channels=self.channels, rate=self.rate,
+                    input=True, frames_per_buffer=self.chunk_size,
                     input_device_index=self.mic_index)
             
             while self.running:
-                mic_frame = AudioData(stream.read(CHUNK, exception_on_overflow=False))
+                mic_frame = AudioData(stream.read(self.chunk_size, exception_on_overflow=False))
 
                 # Discard the first few frames as the microphone subsystem warms up
                 if self._mic_warmup_frames > 0:
@@ -125,11 +132,11 @@ class AudioDevice:
 
     def _start_playback_thread(self):
         def playback_worker():
-            MAX_BUFFER_AGE = 3  # seconds
 
+            # TODO: allow playback to be at a different rate than the microphone
             with TimeThis("Playback thread init"):
                 stream = self.audio.open(
-                    format=FORMAT, channels=CHANNELS, rate=RATE,
+                    format=self.format, channels=self.channels, rate=self.rate,
                     output=True, output_device_index=self.speaker_index)
 
             while self.running:
@@ -140,7 +147,8 @@ class AudioDevice:
                     frames = self.playback_queue.get(timeout=0.1)
 
                     timestamp = time.perf_counter()
-                    if timestamp - self.playback_last_frame_time < CHUNK / RATE:
+                    # Align frame to the end of the last frame if sufficiently consecutive
+                    if timestamp - self.playback_last_frame_time < self.chunk_size / self.rate:
                         timestamp = self.playback_last_frame_time
 
                     frame_data = AudioData(frames, timestamp=timestamp)
@@ -148,7 +156,7 @@ class AudioDevice:
                     self.playback_last_frame_time = frame_data.end_time()
                     with self.playback_buffer_lock:
                         self.playback_buffer.append(frame_data)
-                        self.playback_buffer.prune_older_than(time.perf_counter() - MAX_BUFFER_AGE)
+                        self.playback_buffer.prune_older_than(time.perf_counter() - MAX_PLAYBACK_BUFFER_AGE)
                     stream.write(frames)
 
                     time_to_next_frame = frame_data.end_time() - time.perf_counter()
@@ -162,7 +170,7 @@ class AudioDevice:
         threading.Thread(target=playback_worker, daemon=True).start()
 
     def _filter_frame(self, mic_frame: AudioData) -> AudioData:
-        nperseg = CHUNK  # or another size you prefer
+        nperseg = self.chunk_size  # or another size you prefer
         noverlap = int(nperseg * 0.75)  # or another % you prefer
 
         delay_sec = self.delay
@@ -209,8 +217,8 @@ class AudioDevice:
             return mic_frame
 
         # Short-time Fourier Transform - Transform to frequency domain
-        _, _, S_playback = stft(np_playback, fs=RATE, nperseg=nperseg, noverlap=noverlap)
-        _, _, S_mic = stft(np_mic, fs=RATE, nperseg=nperseg, noverlap=noverlap)
+        _, _, S_playback = stft(np_playback, fs=self.rate, nperseg=nperseg, noverlap=noverlap)
+        _, _, S_mic = stft(np_mic, fs=self.rate, nperseg=nperseg, noverlap=noverlap)
 
         # Ensure signals are same length in frequency domain
         min_frames = min(S_playback.shape[1], S_mic.shape[1])
@@ -222,7 +230,7 @@ class AudioDevice:
         cleaned_spectrum = cleaned_magnitudes * np.exp(1j * np.angle(S_mic))
 
         # Inverse Short-time Fourier Transform - Transform back to time domain
-        _, cleaned_time = istft(cleaned_spectrum, fs=RATE, nperseg=nperseg, noverlap=noverlap)
+        _, cleaned_time = istft(cleaned_spectrum, fs=self.rate, nperseg=nperseg, noverlap=noverlap)
 
         if np.any(np.isnan(cleaned_time)):
             logger.warning("NaNs in ISTFT output")
@@ -236,8 +244,10 @@ class AudioDevice:
 
         return AudioData(cleaned_clip, format=mic_frame.format, channels=mic_frame.channels, rate=mic_frame.rate)
 
-    def read(self, size: int = CHUNK) -> np.ndarray:
+    def read(self, size: int = None) -> np.ndarray:
         result = []
+        if size is None:
+            size = self.chunk_size
         frames_remaining = size
 
         if size <= 0:
@@ -283,7 +293,7 @@ class AudioDevice:
                         logger.warning("Read Buffer overflow detected, discarding frames")
                         # On an overflow discard as many frames as possible to
                         # catch up with the requested frames
-                        chunks_needed = ceil(frames_remaining / CHUNK)
+                        chunks_needed = ceil(frames_remaining / self.chunk_size)
 
                         # Grab the rightmost chunks_needed chunks
                         chunks = list(self.mic_buffer)[-chunks_needed:]
@@ -312,15 +322,16 @@ class AudioDevice:
 
     def play(self, audio_data):
         if isinstance(audio_data, AudioData):
+            assert audio_data.format == self.format
             audio_data = audio_data.as_bytes()
 
-        sample_size = pyaudio.get_sample_size(FORMAT)
-        chunk_bytes = CHUNK * sample_size
+        sample_size = pyaudio.get_sample_size(self.format)
+        bytes_per_chunk = self.chunk_size * sample_size
         total_length = len(audio_data)
         
         chunks_queued = 0
-        for i in range(0, total_length, chunk_bytes):
-            chunk = audio_data[i:i + chunk_bytes]
+        for i in range(0, total_length, bytes_per_chunk):
+            chunk = audio_data[i:i + bytes_per_chunk]
             self.playback_queue.put(chunk)
             chunks_queued += 1
 
