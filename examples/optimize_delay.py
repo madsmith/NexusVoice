@@ -158,13 +158,44 @@ def measure_delay_from_buffers(device, frame_count=10, with_plot=False):
 
 def record(device, duration):
     # Record 2s of audio
-    print("Recording...")
     recorded = []
     for _ in range(ceil(duration * RATE / CHUNK)):
         recorded.append(device.read())
     recorded = np.concatenate(recorded).astype(np.int16).tobytes()
-    print("Recording complete")
     return AudioData(recorded)
+
+def measure_baseline(device, sample, sample_delay, measurements=3, all_data=None):
+    """
+    Play the sample and record the response, then measure the avg volume of
+    the recorded audio.  Take n measurements and then average them.
+    """
+    device.set_sample_delay(sample_delay)
+    device.reset_microphone()
+
+    measurements_values = []
+    for i in range(measurements):
+        # print(f"Playing sample {i + 1}/{measurements}...")
+        device.play(sample)
+        recorded = record(device, sample.duration() + 0.25)
+
+        data = recorded.as_array()
+        mean_volume = np.mean(np.abs(data))
+        std_dev = np.std(data)
+        # print(f"  Mean Volume: {mean_volume:.2f}, Std Dev: {std_dev:.2f}")
+        measurements_values.append((mean_volume, std_dev))
+
+        device.reset_microphone()
+
+    # Calculate average volume and stddev
+    mean_volume = np.mean([d[0] for d in measurements_values])
+    std_dev = np.mean([d[1] for d in measurements_values])
+    if all_data is not None:
+        for mean, std_dev in measurements_values:
+            all_data.append((sample_delay, mean, std_dev))
+
+    # print(f"Average Volume: {mean_volume:.2f}, Std Dev: {std_dev:.2f}")
+
+    return mean_volume, std_dev
 
 def main():
     # Initialize the AudioDevice
@@ -174,27 +205,54 @@ def main():
     sample = AudioData.from_wave(ROOT_DIR / "examples" / "resources" / "test_ai_response_short.wav")
 
     capture_frames = 10
+    print(f"Computing baseline delay...")
     delay, score = measure_delay_from_buffers(device, capture_frames, with_plot=False)
-    print("Score:", score)
-    print("Delay:", delay)
+    print(f"Measured delay: {delay} samples ({delay / RATE:.3f} sec) with score {score:.3f}")
 
-    device.set_sample_delay(delay)
-    device.reset_microphone()
+    all_data = []
 
-    print("Playing sample...")
-    print("Sample Duration:", sample.duration())
-    device.play(sample)
-    playback_audio = record(device, sample.duration() + 0.25)
-    print(f"Recorded audio duration: {playback_audio.duration()} sec vs {sample.duration()} sec")
-    time.sleep(1)
-    print("Playing recorded audio...")
-    # Print average volume and stddev
-    data = playback_audio.as_array()
-    mean_volume = np.mean(np.abs(data))
-    std_dev = np.std(data)
-    print(f"Mean Volume: {mean_volume:.2f}, Std Dev: {std_dev:.2f}")
-    device.play(playback_audio)
-    time.sleep(playback_audio.duration() + 0.25)
+    sample_mean, _ = measure_baseline(device, sample, delay, all_data=all_data)
+
+    search_step_size = 300
+    min_step_size = 2
+    current_delay = delay
+    current_volume = None
+    direction = 0
+
+    while search_step_size > min_step_size:
+        left_delay = current_delay - search_step_size
+        right_delay = current_delay + search_step_size
+
+        current_volume, _ = measure_baseline(device, sample, current_delay, all_data=all_data)
+        left_volume, _ = measure_baseline(device, sample, left_delay, all_data=all_data)
+        right_volume, _ = measure_baseline(device, sample, right_delay, all_data=all_data)
+
+        print(f"Step: {search_step_size:2} | Left {left_delay}: {left_volume:.2f} | Center {current_delay}: {current_volume:.2f} | Right {right_delay}: {right_volume:.2f}")
+
+        if left_volume < current_volume:
+            current_delay, current_volume = left_delay, left_volume
+            if direction > 0:
+                search_step_size = ceil(search_step_size * 1.5)
+            direction = -1
+        elif right_volume < current_volume:
+            current_delay, current_volume = right_delay, right_volume
+            if direction < 0:
+                search_step_size = ceil(search_step_size * 1.5)
+            direction = 1
+        else:
+            search_step_size = ceil(search_step_size / 2)
+
+
+    print(f"\nOptimized delay: {current_delay} → Avg Volume: {current_volume:.2f}")
+
+    # Sort all_data by delay
+    all_data.sort(key=lambda x: x[0])
+
+    for datum in all_data:
+        sample_delay, mean_volume, std_dev = datum
+        print(f"  {sample_delay} → {mean_volume:.2f} ± {std_dev:.2f}")
+
+
 
 
 if __name__ == "__main__":
