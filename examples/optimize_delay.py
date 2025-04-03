@@ -211,8 +211,6 @@ def main():
 
     all_data = []
 
-    sample_mean, _ = measure_baseline(device, sample, delay, all_data=all_data)
-
     search_step_size = 300
     min_step_size = 2
     current_delay = delay
