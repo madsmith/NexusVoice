@@ -11,6 +11,8 @@ class TimeThis:
         self.taskname = taskname
         if not logfn:
             self.logfn = lambda x: print(x)
+        else:
+            self.logfn = logfn
 
     def __enter__(self):
         self.logfn(f"Starting: {self.taskname}")
