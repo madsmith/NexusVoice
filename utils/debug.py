@@ -7,18 +7,20 @@ _error_callback = None
 _warn_callback = None
 
 class TimeThis:
-    def __init__(self, taskname: str):
+    def __init__(self, taskname: str, logfn=None):
         self.taskname = taskname
+        if not logfn:
+            self.logfn = lambda x: print(x)
 
     def __enter__(self):
-        print(f"Starting: {self.taskname}")
+        self.logfn(f"Starting: {self.taskname}")
         self.start = time.perf_counter()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         end = time.perf_counter()
         elapsed_ms = (end - self.start) * 1000
-        print(f"Elapsed time for {self.taskname}: {elapsed_ms:.2f} ms")
+        self.logfn(f"Elapsed time for {self.taskname}: {elapsed_ms:.2f} ms")
         
 class LogLevel:
     NONE = 0
