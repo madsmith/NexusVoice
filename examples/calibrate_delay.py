@@ -1,3 +1,4 @@
+import argparse
 import logging
 import numpy as np
 import pyaudio
@@ -167,14 +168,18 @@ def record(device, duration):
     return AudioData(recorded)
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--graph", action="store_true", help="Show plot of audio waveforms")
+    args = parser.parse_args()
+
     # Initialize the AudioDevice
-    device = AudioDevice()
+    device = AudioDevice(chunk_size=CHUNK)
 
     # Load playback sample
     sample = AudioData.from_wave(ROOT_DIR / "examples" / "resources" / "test_ai_response_short.wav")
 
     capture_frames = 10
-    delay, score = measure_delay_from_buffers(device, capture_frames, with_plot=False)
+    delay, score = measure_delay_from_buffers(device, capture_frames, with_plot=args.graph)
     print("Score:", score)
     print("Delay:", delay)
 
