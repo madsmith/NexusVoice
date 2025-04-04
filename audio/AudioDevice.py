@@ -13,6 +13,7 @@ import threading
 import queue
 import time
 from scipy.signal import stft, istft
+from scipy.ndimage import uniform_filter1d
 
 logger = logging.getLogger(__name__)
 
@@ -186,8 +187,9 @@ class AudioDevice:
         with self.playback_buffer_lock:
             np_playback = self.playback_buffer.extract_frames(frame_start, len(mic_frame))
 
-        # Log mic average volume
-        mic_avg = np.mean(np.abs(mic_frame.as_array()))
+        # Log mic average RMS volume 
+        mic_avg = np.sqrt(max(np.mean(np.square(mic_frame.as_array())), 0))
+        
         logger.debug(f"Mic Frame: {mic_frame.timestamp:.3f} - {mic_frame.end_time():.3f} ({mic_avg:.1f})")
 
         if np.all(np_playback == 0):
@@ -205,7 +207,7 @@ class AudioDevice:
         np_mic = mic_frame.as_array(np.float32)
         np_playback = np_playback.astype(np.float32)
 
-        playback_avg = np.mean(np.abs(np_playback))
+        playback_avg = np.sqrt(np.max(np.mean(np.square(np_playback)), 0))
         logger.debug(f"Playback: {frame_start:.3f} - {frame_end:.3f} ({playback_avg:.1f})")
 
         # Ensure signals are same length
@@ -230,9 +232,27 @@ class AudioDevice:
         S_playback = S_playback[:, :min_frames]
         S_mic = S_mic[:, :min_frames]
 
-        # Subtracting spectral enegy of playback from microphone
-        cleaned_magnitudes = np.maximum(np.abs(S_mic) - np.abs(S_playback), 0)
-        cleaned_spectrum = cleaned_magnitudes * np.exp(1j * np.angle(S_mic))
+        # Compute magnitudes
+        mic_magnitude = np.abs(S_mic)
+        playback_magnitude = np.abs(S_playback)
+
+        # Temporal smoothing of playback over time axis (axis=1)
+        smoothed_playback_magnitude = uniform_filter1d(playback_magnitude, size=3, axis=1)
+
+        # Over-subtract + spectral floor
+        OVER_SUBTRACT_MULTIPLIER = 1.5
+        FLOOR = 1e-2
+
+        subtracted = np.maximum(mic_magnitude - OVER_SUBTRACT_MULTIPLIER * smoothed_playback_magnitude, FLOOR)
+
+        # Wiener-style gain limiting (soften only bins where playback is overwhelming)
+        gain_limit = np.clip(subtracted / (mic_magnitude + 1e-10), 0, 1.0)
+
+        # Apply gain limit to mic magnitude
+        final_mag = mic_magnitude * gain_limit
+
+        # Use mic phase (more stable than blending)
+        cleaned_spectrum = final_mag * np.exp(1j * np.angle(S_mic))
 
         # Inverse Short-time Fourier Transform - Transform back to time domain
         _, cleaned_time = istft(cleaned_spectrum, fs=self.rate, nperseg=nperseg, noverlap=noverlap)
