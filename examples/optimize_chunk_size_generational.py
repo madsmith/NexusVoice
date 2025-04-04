@@ -179,7 +179,7 @@ def measure_baseline(device, sample, sample_delay, chunk_size=CHUNK, measurement
         recorded = record(device, sample.duration() + 0.25, chunk_size=chunk_size)
 
         data = recorded.as_array()
-        mean_volume = np.sqrt(np.mean(data**2))
+        mean_volume = np.sqrt(max(np.mean(data**2), 0))
         std_dev = np.std(data)
         # print(f"  Mean Volume: {mean_volume:.2f}, Std Dev: {std_dev:.2f}")
         measurements_values.append((mean_volume, std_dev))
