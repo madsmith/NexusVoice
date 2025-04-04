@@ -64,8 +64,11 @@ class AudioDevice:
         # Discard the first few microphone frames as the microphone subsystem warms up
         self._mic_warmup_frames = 1024 * 3
 
-        self._start_mic_thread()
+        self._playback_thread = None
+        self._mic_thread = None
+
         self._start_playback_thread()
+        self._start_mic_thread()
 
         # Wait for both threads to be ready
         self.playback_ready.wait()
@@ -90,7 +93,7 @@ class AudioDevice:
 
     def _start_mic_thread(self):
         def mic_worker():
-            with TimeThis("Mic thread init"):
+            with TimeThis("Mic thread init", logger.debug):
                 stream = self.audio.open(
                     format=self.format, channels=self.channels, rate=self.rate,
                     input=True, frames_per_buffer=self.chunk_size,
@@ -128,13 +131,14 @@ class AudioDevice:
             stream.stop_stream()
             stream.close()
 
-        threading.Thread(target=mic_worker, daemon=True).start()
+        self._mic_thread = threading.Thread(target=mic_worker, daemon=True)
+        self._mic_thread.start()
 
     def _start_playback_thread(self):
         def playback_worker():
 
             # TODO: allow playback to be at a different rate than the microphone
-            with TimeThis("Playback thread init"):
+            with TimeThis("Playback thread init", logger.debug):
                 stream = self.audio.open(
                     format=self.format, channels=self.channels, rate=self.rate,
                     output=True, output_device_index=self.speaker_index)
@@ -167,7 +171,8 @@ class AudioDevice:
                     continue
             stream.stop_stream()
 
-        threading.Thread(target=playback_worker, daemon=True).start()
+        self._playback_thread = threading.Thread(target=playback_worker, daemon=True)
+        self._playback_thread.start()
 
     def _filter_frame(self, mic_frame: AudioData) -> AudioData:
         nperseg = self.chunk_size  # or another size you prefer
@@ -245,6 +250,8 @@ class AudioDevice:
         return AudioData(cleaned_clip, format=mic_frame.format, channels=mic_frame.channels, rate=mic_frame.rate)
 
     def read(self, size: int = None) -> np.ndarray:
+        assert self.running, "AudioDevice is not running"
+
         result = []
         if size is None:
             size = self.chunk_size
@@ -314,6 +321,8 @@ class AudioDevice:
             return np.concatenate(result)
 
     def reset_microphone(self):
+        assert self.running, "AudioDevice is not running"
+
         with self.mic_lock:
             self.mic_buffer.clear()
             self.mic_buffer_unfiltered.clear()
@@ -321,6 +330,8 @@ class AudioDevice:
             self.read_did_overflow = False
 
     def play(self, audio_data):
+        assert self.running, "AudioDevice is not running"
+
         if isinstance(audio_data, AudioData):
             assert audio_data.format == self.format
             audio_data = audio_data.as_bytes()
@@ -337,7 +348,9 @@ class AudioDevice:
 
         logger.debug(f"Queued {chunks_queued} chunks for playback")
 
-    def stop(self):
+    def shutdown(self):
         self.running = False
-        time.sleep(0.5)
+        self._mic_thread.join()
+        self._playback_thread.join()
         self.audio.terminate()
+        self.audio = None
