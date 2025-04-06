@@ -118,11 +118,23 @@ class AudioInferenceEngine(InferenceEngineBase):
         )
 
     def initModel(self):
-        self.processor = WhisperProcessor.from_pretrained(
-            self.model_id,
-            return_attention_mask=True)
-        model = WhisperForConditionalGeneration.from_pretrained(
-            self.model_id)
+        # Attempt to load the model locally first
+        for local_only in [True, False]:
+            try:
+                self.processor = WhisperProcessor.from_pretrained(
+                    self.model_id,
+                    return_attention_mask=True,
+                    local_files_only=local_only)
+                model = WhisperForConditionalGeneration.from_pretrained(
+                    self.model_id,
+                    local_files_only=local_only)
+                break
+            except Exception as e:
+                logger.warning(f"Failed to load model locally: {e}")
+
+        if self.processor is None or model is None:
+            raise RuntimeError("Failed to load model or processor.")
+        
         model.generation_config.forced_decoder_ids = None
 
         # Load model to device
