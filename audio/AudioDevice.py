@@ -15,7 +15,8 @@ import time
 from scipy.signal import stft, istft
 from scipy.ndimage import uniform_filter1d
 
-logger = logging.getLogger(__name__)
+from utils.logging import get_logger
+logger = get_logger(__name__)
 
 from audio.utils import AudioData, PlaybackBuffer, save_recording
 from utils.debug import TimeThis
@@ -105,7 +106,7 @@ class AudioDevice:
 
                 # Discard the first few frames as the microphone subsystem warms up
                 if self._mic_warmup_frames > 0:
-                    logger.debug(f"Discarding warmup frame {len(mic_frame)} bytes: Mean: {np.mean(np.abs(mic_frame.as_array())):.2f}")
+                    logger.trace(f"Discarding warmup frame {len(mic_frame)} bytes: Mean: {np.mean(np.abs(mic_frame.as_array())):.2f}")
                     self._mic_warmup_frames -= len(mic_frame)
                     continue
 
@@ -132,12 +133,11 @@ class AudioDevice:
             stream.stop_stream()
             stream.close()
 
-        self._mic_thread = threading.Thread(target=mic_worker, daemon=True)
+        self._mic_thread = threading.Thread(target=mic_worker, daemon=True, name="MicrophoneThread")
         self._mic_thread.start()
 
     def _start_playback_thread(self):
         def playback_worker():
-
             # TODO: allow playback to be at a different rate than the microphone
             with TimeThis("Playback thread init", logger.debug):
                 stream = self.audio.open(
@@ -157,7 +157,7 @@ class AudioDevice:
                         timestamp = self.playback_last_frame_time
 
                     frame_data = AudioData(frames, timestamp=timestamp)
-                    logger.debug(f"Playback Frame: {frame_data.timestamp:.3f} - {frame_data.end_time():.3f}")
+                    logger.trace(f"Playback Frame: {frame_data.timestamp:.3f} - {frame_data.end_time():.3f}")
                     self.playback_last_frame_time = frame_data.end_time()
                     with self.playback_buffer_lock:
                         self.playback_buffer.append(frame_data)
@@ -166,13 +166,13 @@ class AudioDevice:
 
                     time_to_next_frame = frame_data.end_time() - time.perf_counter()
                     sleep_time = max(0, time_to_next_frame - 0.01)
-                    logger.debug(f"Playback Sleep: {sleep_time:.3f} sec")
+                    logger.trace(f"Playback Sleep: {sleep_time:.3f} sec")
                     time.sleep(sleep_time)
                 except queue.Empty:
                     continue
             stream.stop_stream()
 
-        self._playback_thread = threading.Thread(target=playback_worker, daemon=True)
+        self._playback_thread = threading.Thread(target=playback_worker, daemon=True, name="PlaybackThread")
         self._playback_thread.start()
 
     def _filter_frame(self, mic_frame: AudioData) -> AudioData:
@@ -190,16 +190,16 @@ class AudioDevice:
         # Log mic average RMS volume 
         mic_avg = np.sqrt(max(np.mean(np.square(mic_frame.as_array())), 0))
         
-        logger.debug(f"Mic Frame: {mic_frame.timestamp:.3f} - {mic_frame.end_time():.3f} ({mic_avg:.1f})")
+        logger.trace(f"Mic Frame: {mic_frame.timestamp:.3f} - {mic_frame.end_time():.3f} ({mic_avg:.1f})")
 
         if np.all(np_playback == 0):
-            logger.debug(f"No playback found for this window")
-            logger.debug(f"  Window: {frame_start:.3f} - {frame_end:.3f}")
-            logger.debug(f"  Delay: {self.delay:.3f} sec")
+            logger.trace(f"No playback found for this window")
+            logger.trace(f"  Window: {frame_start:.3f} - {frame_end:.3f}")
+            logger.trace(f"  Delay: {self.delay:.3f} sec")
             
             with self.playback_buffer_lock:
                str = self.playback_buffer.dump_windows("    ")
-               logger.debug(str)
+               logger.trace(str)
             return mic_frame
         
         
@@ -208,7 +208,7 @@ class AudioDevice:
         np_playback = np_playback.astype(np.float32)
 
         playback_avg = np.sqrt(np.max(np.mean(np.square(np_playback)), 0))
-        logger.debug(f"Playback: {frame_start:.3f} - {frame_end:.3f} ({playback_avg:.1f})")
+        logger.trace(f"Playback: {frame_start:.3f} - {frame_end:.3f} ({playback_avg:.1f})")
 
         # Ensure signals are same length
         min_length = min(len(np_playback), len(np_mic))
