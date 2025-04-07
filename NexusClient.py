@@ -1,3 +1,5 @@
+import init
+
 import logging
 import queue
 import threading
@@ -6,8 +8,10 @@ import omegaconf
 from openwakeword.model import Model as OpenWakeWordModel
 import silero_vad
 import torch
+import torchaudio
 
 from ai.AudioInferenceEngine import AudioInferenceEngine
+from ai.TTSInferenceEngine import TTSInferenceEngine
 from init import initialize_openwakeword
 from audio.utils import AudioBuffer
 from audio.AudioDevice import AudioDevice
@@ -44,6 +48,9 @@ class NexusVoiceClient(threading.Thread):
 
         self.wake_word_model: OpenWakeWordModel = None
         self._vad_model = None
+        self._whisper_engine: AudioInferenceEngine = None   
+        self._tts_engine: TTSInferenceEngine = None
+
         self._command_queue = queue.Queue()
 
         self._vad_buffer: AudioBuffer = None
@@ -60,6 +67,7 @@ class NexusVoiceClient(threading.Thread):
         self._initialize_wake_word_model()
         self._initialize_VAD_model()
         self._initialize_whisper_model()
+        self._initialize_TTS_model()
 
         self._initialize_threads()
 
@@ -104,6 +112,12 @@ class NexusVoiceClient(threading.Thread):
         self._whisper_engine = AudioInferenceEngine(model)
         self._whisper_engine.initialize()
 
+    def _initialize_TTS_model(self):
+        logger.info("Initializing TTS model...")
+        voice = self.config.tts.get("voice", None)
+        self._tts_engine = TTSInferenceEngine(voices=voice)
+        self._tts_engine.initialize()
+
     def _initialize_threads(self):
         logger.info("Initializing threads")
         thread_name = f"{self.name}::CommandProcessor"
@@ -138,28 +152,6 @@ class NexusVoiceClient(threading.Thread):
                 self._process_vad()
                 self._process_wake_word()
 
-                # try:
-                #     command = self._command_queue.get_nowait()
-                #     with TimeThis("Process Command"):
-                #         logger.debug(f"Received command {command}")
-
-                #         if isinstance(command, NexusVoiceClient.CommandWakeWord):
-                #             if self._confirm_wake_word(command):
-                #                 logger.debug(f"Received wake word command {command.wake_word}")
-                #                 self.startRecording()
-                #         elif isinstance(command, NexusVoiceClient.CommandProcessAudio):
-                #             audio_bytes = command.audio_bytes
-                #             self.audio_device.play(audio_bytes)
-
-                #             # if command.wake_word == "stop":
-                #             #     self.stop()
-                #             # elif command.wake_word == "nexus_v4":
-                #             #     self.startRecording()
-                #             # else:
-                #             #     logger.warning(f"Unknown wake word {command.wake_word}")
-                # except queue.Empty:
-                #     pass
-
             except KeyboardInterrupt:
                 break
             except Exception as e:
@@ -193,13 +185,40 @@ class NexusVoiceClient(threading.Thread):
             logger.debug(f"Wake word {command.wake_word} not confirmed")
             self.stopRecording(cancel=True)
 
+    def _resample_audio(self, audio_tensor: torch.Tensor, orig_freq=24000, new_freq=16000):
+        # Add batch dimension if needed
+        if audio_tensor.ndim == 1:
+            audio_tensor = audio_tensor.unsqueeze(0)
+
+        resampler = torchaudio.transforms.Resample(orig_freq=orig_freq, new_freq=new_freq)
+        return resampler(audio_tensor).squeeze(0)  # remove batch dim
+
+    def _tensor_to_int16(self, audio_tensor: torch.Tensor) -> bytes:
+        # Clamp values to avoid overflows
+        audio_clamped = torch.clamp(audio_tensor, -1.0, 1.0)
+        # Convert to int16 range
+
+        max_int16 = np.iinfo(np.int16).max
+        audio_int16 = (audio_clamped * max_int16).to(torch.int16)
+        return audio_int16.numpy().tobytes()
+        
     def _process_command_process_audio(self, command):
+
         # Convert audio bytes into numpy array
         np_audio = np.frombuffer(command.audio_bytes, dtype=NUMPY_AUDIO_FORMAT)
 
         transcription = self._whisper_engine.infer(np_audio, AUDIO_SAMPLE_RATE)
 
         logger.info(f"Transcription: {transcription}")
+
+        audio_tensor = self._tts_engine.infer(transcription, voice=self.config.tts.voice)
+
+        # Convert the audio tensor to numpy array
+        audio = self._tensor_to_int16(self._resample_audio(audio_tensor))
+
+        self.audio_device.play(audio)
+
+
 
     def _process_vad(self):
         """ Process data in the vad buffer if enough data is available"""

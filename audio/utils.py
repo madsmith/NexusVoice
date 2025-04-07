@@ -211,7 +211,7 @@ import pyaudio
 
 class AudioData:
     def __init__(self, frames: bytes, format=pyaudio.paInt16, channels=1, rate=16000, timestamp=None):
-        assert isinstance(frames, bytes) or isinstance(frames, np.ndarray), "frames must be of type bytes or numpy ndarray"
+        assert isinstance(frames, bytes) or isinstance(frames, np.ndarray), f"frames must be of type bytes or numpy ndarray, not {type(frames)}"
         # Format describes how many audio bytes are in each sample
         self.format = format
         self.channels = channels
