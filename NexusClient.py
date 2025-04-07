@@ -8,7 +8,7 @@ import silero_vad
 import torch
 
 from ai.AudioInferenceEngine import AudioInferenceEngine
-
+from init import initialize_openwakeword
 from audio.utils import AudioBuffer
 from audio.AudioDevice import AudioDevice
 
@@ -78,6 +78,8 @@ class NexusVoiceClient(threading.Thread):
 
     def _initialize_wake_word_model(self):
         logger.info("Initializing wake word model")
+
+        initialize_openwakeword()
 
         model_conf = omegaconf.OmegaConf.select(self.config, "wake_word.models")
         if model_conf is None:
@@ -354,12 +356,16 @@ class NexusVoiceClient(threading.Thread):
 
 def main():
     try:
+        from utils.logging import StackTraceFormatter
         # logging.basicConfig(level=logging.DEBUG, format="%(message)s")
         log_format = "[%(asctime)s] [%(levelname)s] - %(name)s %(message)s"
         log_format = "[{levelname}]\t{threadName}\t{message}"
         log_level = logging.DEBUG
         # log_level = LOG_TRACE_LEVEL
-        logging.basicConfig(level=log_level, style="{", format=log_format)
+        handler = logging.StreamHandler()
+        # handler.setFormatter(StackTraceFormatter(log_format, style="{"))
+        handler.setFormatter(logging.Formatter(log_format, style="{"))
+        logging.basicConfig(level=log_level, style="{", format=log_format, handlers=[handler])
         # log_format = "[%(asctime)s] [%(levelname)s] - %(name)s (%(pathname)s:%(lineno)d): %(message)s"
         # logging.basicConfig(level=logging.DEBUG, format=log_format)
 
