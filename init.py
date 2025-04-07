@@ -1,9 +1,8 @@
-import logging
 import openwakeword
 import os
 
-
-logger = logging.getLogger(__name__)
+from utils.logging import get_logger
+logger = get_logger(__name__)
 
 def initialize_openwakeword():
     model_paths = openwakeword.get_pretrained_model_paths()
