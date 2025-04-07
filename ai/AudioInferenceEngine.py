@@ -12,7 +12,7 @@ sys.path.append(str(ROOT_DIR))
 from utils.logging import get_logger
 logger = get_logger(__name__)
 
-from InferenceEngine import InferenceEngineBase
+from ai.InferenceEngine import InferenceEngineBase
 
 class AudioInferenceEngine(InferenceEngineBase):
     def __init__(self, model_id):
@@ -49,6 +49,8 @@ class AudioInferenceEngine(InferenceEngineBase):
                 break
             except Exception as e:
                 logger.warning(f"Failed to load model locally: {e}")
+                # Print statck trace of e
+                logger.debug(e, exc_info=True)
 
         if self.processor is None or model is None:
             raise RuntimeError("Failed to load model or processor.")
