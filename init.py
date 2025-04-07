@@ -1,3 +1,17 @@
+import os
+os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
+
+import warnings
+warnings.filterwarnings(
+    "ignore", message=".*will fall back to run on the CPU.*", category=UserWarning
+)
+warnings.filterwarnings(
+    "ignore", message="dropout option adds dropout", category=UserWarning
+)
+warnings.filterwarnings(
+    "ignore", message="`torch.nn.utils.weight_norm` is deprecated in favor", category=FutureWarning
+)
+
 import openwakeword
 import os
 
