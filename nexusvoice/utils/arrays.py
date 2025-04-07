@@ -1,6 +1,5 @@
 import numpy as np
 
-
 def abbreviate_data(data):
     """
     Return a string representation of the data:

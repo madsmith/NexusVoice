@@ -5,10 +5,6 @@ import threading
 import torch
 from transformers import WhisperProcessor, WhisperForConditionalGeneration
 
-BASE_DIR = Path(__file__).resolve().parent
-ROOT_DIR = BASE_DIR.parent
-sys.path.append(str(ROOT_DIR))
-
 from utils.logging import get_logger
 logger = get_logger(__name__)
 

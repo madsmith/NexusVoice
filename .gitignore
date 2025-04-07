@@ -1,11 +1,22 @@
-.DS_Store
-config.yml
-response.mp3
 .venv
 .venv*
 
+# Packaging artifacts
+*.egg-info/
+*.dist-info/
+build/
+dist/
+
+# Runtime Config
+config.yml
+
+# Runtime artifacts
 *.pyc
 latest_silero_models.yml
+
+.DS_Store
+response.mp3
+
 model.js
 schema.json
 test_cleaned_fd.wav

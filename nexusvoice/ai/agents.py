@@ -2,16 +2,14 @@ from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor, Future, as_completed
 from dataclasses import dataclass
 from enum import Enum
-import logging
 import os
 import threading
 import queue
 import random
 import threading
 
-import numpy as np
 import omegaconf
-import torch
+
 from transformers import pipeline, AutoModelForCausalLM, AutoTokenizer
 from transformers import WhisperProcessor, WhisperForConditionalGeneration
 

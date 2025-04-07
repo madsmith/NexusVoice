@@ -1,0 +1,35 @@
+[project]
+name = "nexusvoice"
+version = "0.1.0"
+description = "NexusVoice Application"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "accelerate==1.6.0",
+    "numpy~=2.2",
+    "openwakeword==0.6.0",
+    "kokoro>=0.9.4",
+    "pyaudio~=0.2",
+    "openai~=1.65",
+    "omegaconf>=2.3",
+    "pydub~=0.25",
+    "setuptools",
+    "silero==0.4.1",
+    "silero-vad==5.1.2",
+    "torch>=2.6",
+    "transformers~=4.49",
+    "webrtcvad~=2.0",
+    "speexdsp-ns @ https://github.com/madsmith/speexdsp-python/releases/download/0.1.2/speexdsp_ns-0.1.2-cp312-cp312-macosx_15_0_arm64.whl"
+]
+
+[project.optional-dependencies]
+dev = [
+    "matplotlib>=3.10"
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = { find = { include = ["nexusvoice*"] } }

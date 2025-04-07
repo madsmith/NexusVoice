@@ -1,6 +1,5 @@
 import sys
 import time
-from functools import wraps
 
 # Callback function for when error is called
 _error_callback = None
@@ -87,6 +86,7 @@ def fmt_time(t):
         return f"{t*1000000000:.2f} ns"
     
 def log_performance(func):
+    from functools import wraps
     @wraps(func)
     def wrapper(*args, **kwargs):
         start_time = time.perf_counter()
@@ -102,6 +102,7 @@ def get_performance_logs():
     return _performance_logs
 
 def record_performance(func):
+    from functools import wraps
     global _performance_logs
     @wraps(func)
     def wrapper(*args, **kwargs):

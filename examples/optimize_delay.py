@@ -8,13 +8,11 @@ from pathlib import Path
 from math import ceil
 import sys
 
-BASE_DIR = Path(__file__).resolve().parent
-ROOT_DIR = BASE_DIR.parent
-sys.path.append(str(ROOT_DIR))
+ROOT_DIR = Path(__file__).resolve().parents[1]
 
-from audio.AudioDevice import AudioDevice
-from audio.utils import AudioData
-from utils.debug import TimeThis
+from nexusvoice.audio.AudioDevice import AudioDevice
+from nexusvoice.audio.utils import AudioData
+from nexusvoice.utils.debug import TimeThis
 
 logger = logging.getLogger(__name__)
 #logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - '%(message)s'")

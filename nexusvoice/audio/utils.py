@@ -1,18 +1,12 @@
 from abc import ABC, abstractmethod
-from collections import deque
 import logging
 from pathlib import Path
 import numpy as np
 import pyaudio
 from pydub import AudioSegment
 import wave
-import sys
 
-BASE_DIR = Path(__file__).resolve().parent
-ROOT_DIR = BASE_DIR.parent
-sys.path.append(str(ROOT_DIR))
-
-from utils.bytes import ByteRingBuffer
+from nexusvoice.utils.bytes import ByteRingBuffer
 
 logger = logging.getLogger(__name__)
 

@@ -1,6 +1,6 @@
-import logging
+from nexusvoice.utils.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 class ByteRingBuffer:
     def __init__(self, max_size):

@@ -1,4 +1,4 @@
-import init
+import nexusvoice.bootstrap
 
 import logging
 import queue
@@ -10,11 +10,10 @@ import silero_vad
 import torch
 import torchaudio
 
-from ai.AudioInferenceEngine import AudioInferenceEngine
-from ai.TTSInferenceEngine import TTSInferenceEngine
-from init import initialize_openwakeword
-from audio.utils import AudioBuffer
-from audio.AudioDevice import AudioDevice
+from nexusvoice.ai.AudioInferenceEngine import AudioInferenceEngine
+from nexusvoice.ai.TTSInferenceEngine import TTSInferenceEngine
+from nexusvoice.audio.utils import AudioBuffer
+from nexusvoice.audio.AudioDevice import AudioDevice
 
 from config import (
     AUDIO_FORMAT,
@@ -32,7 +31,7 @@ SILERO_VAD_AUDIO_CHUNK = 512
 
 INFERENCE_FRAMEWORK = "onnx"
 
-from utils.logging import get_logger
+from nexusvoice.utils.logging import get_logger
 logger = get_logger(__name__)
 
 class NexusVoiceClient(threading.Thread):
@@ -86,8 +85,6 @@ class NexusVoiceClient(threading.Thread):
 
     def _initialize_wake_word_model(self):
         logger.info("Initializing wake word model")
-
-        initialize_openwakeword()
 
         model_conf = omegaconf.OmegaConf.select(self.config, "wake_word.models")
         if model_conf is None:
@@ -375,7 +372,7 @@ class NexusVoiceClient(threading.Thread):
 
 def main():
     try:
-        from utils.logging import StackTraceFormatter
+        from nexusvoice.utils.logging import StackTraceFormatter
         # logging.basicConfig(level=logging.DEBUG, format="%(message)s")
         log_format = "[%(asctime)s] [%(levelname)s] - %(name)s %(message)s"
         log_format = "[{levelname}]\t{threadName}\t{message}"

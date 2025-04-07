@@ -1,5 +1,4 @@
 import argparse
-import logging
 import numpy as np
 import pyaudio
 import random
@@ -8,18 +7,14 @@ from scipy.signal import chirp, correlate, spectrogram
 import matplotlib.pyplot as plt
 from pathlib import Path
 from math import ceil, floor
-import sys
 
-BASE_DIR = Path(__file__).resolve().parent
-ROOT_DIR = BASE_DIR.parent
-sys.path.append(str(ROOT_DIR))
-
-from audio.AudioDevice import AudioDevice
-from audio.utils import AudioData
-from utils.debug import TimeThis
-
-logger = logging.getLogger(__name__)
+from nexusvoice.utils.logging import get_logger
+logger = get_logger(__name__)
 #logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - '%(message)s'")
+ROOT_DIR = Path(__file__).resolve().parents[1]
+
+from nexusvoice.audio.AudioDevice import AudioDevice
+from nexusvoice.audio.utils import AudioData
 
 AUDIO_FORMAT = pyaudio.paInt16
 CHUNK = 1024

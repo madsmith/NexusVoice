@@ -1,12 +1,6 @@
 from kokoro import KPipeline, KModel
-from pathlib import Path
-import sys
 import threading
 import torch
-
-BASE_DIR = Path(__file__).resolve().parent
-ROOT_DIR = BASE_DIR.parent
-sys.path.append(str(ROOT_DIR))
 
 from utils.logging import get_logger
 logger = get_logger(__name__)

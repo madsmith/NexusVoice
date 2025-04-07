@@ -1,5 +1,4 @@
 import argparse
-import logging
 import numpy as np
 import pyaudio
 import time
@@ -7,18 +6,16 @@ from scipy.signal import chirp, correlate, spectrogram
 import matplotlib.pyplot as plt
 from pathlib import Path
 from math import ceil, floor
-import sys
 
-BASE_DIR = Path(__file__).resolve().parent
-ROOT_DIR = BASE_DIR.parent
-sys.path.append(str(ROOT_DIR))
+ROOT_DIR = Path(__file__).resolve().parents[1]
 
-from audio.AudioDevice import AudioDevice
-from audio.utils import AudioData
-from utils.debug import TimeThis
-
-logger = logging.getLogger(__name__)
+from nexusvoice.utils.logging import get_logger
+logger = get_logger(__name__)
 #logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - '%(message)s'")
+
+from nexusvoice.audio.AudioDevice import AudioDevice
+from nexusvoice.audio.utils import AudioData
+from nexusvoice.utils.debug import TimeThis
 
 AUDIO_FORMAT = pyaudio.paInt16
 CHUNK = 1024
@@ -178,7 +175,7 @@ def measure_baseline(device, sample, sample_delay, chunk_size=CHUNK, measurement
         recorded = record(device, sample.duration() + 0.25, chunk_size=chunk_size)
 
         data = recorded.as_array()
-        mean_volume = np.sqrt(max(np.mean(data**2), 0))
+        mean_volume = np.sqrt(np.max(np.mean(data**2), 0))
         std_dev = np.std(data)
         # print(f"  Mean Volume: {mean_volume:.2f}, Std Dev: {std_dev:.2f}")
         measurements_values.append((mean_volume, std_dev))

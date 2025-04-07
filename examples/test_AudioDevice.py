@@ -13,10 +13,10 @@ from scipy.signal import chirp, correlate, spectrogram
 import time
 import wave
 
-from audio.AudioDevice import AudioDevice
-from audio.music import Tone, Rest
-from audio.utils import AudioData
-from utils.debug import TimeThis
+from nexusvoice.audio.AudioDevice import AudioDevice
+from nexusvoice.audio.music import Tone, Rest
+from nexusvoice.audio.utils import AudioData
+from nexusvoice.utils.debug import TimeThis
 
 RATE = 16000
 CHUNK = 1024
@@ -309,7 +309,6 @@ def main():
     # print("Delay:", delay)
     # time.sleep(2)
 
-    capture_frames = int(0.5 * RATE) // CHUNK
     capture_frames = 10
     delay, score = measure_delay_from_buffers(device, capture_frames, with_plot=False)
     print("Score:", score)

@@ -1,106 +1,80 @@
 # NexusVoice
 
-NexusVoice is a simple Python project that uses the `pyaudio` and `openwakeword` libraries.
+NexusVoice is a Python-based voice processing application using libraries like `pyaudio`, `openwakeword`, and others. It features audio streaming, wake word detection, and support for real-time inference.
 
-## Installation
+## Project Setup
 
-1. Clone the repository:
-    ```sh
-    git clone https://github.com/madsmith/NexusVoice.git
-    cd NexusVoice
-    ```
+### 1. Clone the repository
 
-2. Create a virtual environment:
-    ```sh
-    python -m venv venv
-    source venv/bin/activate  # On Windows use `venv\Scripts\activate`
-    ```
+```sh
+git clone https://github.com/madsmith/NexusVoice.git
+cd NexusVoice
+```
 
-3. Install the required dependencies:
-    One of the requirements is ffmpeg for audio processing.  Installation varies by architecture
-    but on linux, you may use the following.
-    ```sh
-    apt install ffmpeg
-    ```
+### 2. Create and activate a virtual environment
 
-    Python dependencies can be installed by running the following.
-    
-    ```sh
-    pip install -r requirements.txt
-    ```
-    Note: one of the dependencies is pyaudio which on a Mac environment requires portaudio to be installed separately.
+```sh
+python3 -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+```
 
-    ```sh
-    # Install xcode command line tools (if not installed)
-    xcode-select --install
-    # Using homebrew or package manager of choice
-    brew install portaudio
-    # Install pyaudio now that requirement is satisfied.
-    pip install pyaudio
-    ```
+### 3. Install system dependencies
 
+#### macOS
 
-## Running the Project
+```sh
+xcode-select --install     # If not already installed
+brew install portaudio     # Required for PyAudio
+brew install ffmpeg        # Required for audio processing
+```
 
-1. Ensure you have the necessary models downloaded:
-    ```py
-    openwakeword.utils.download_models()
-    ```
+#### Linux
 
-2. Run the main script:
-    ```sh
-    python3 NexusVoice.py
-    ```
+```sh
+sudo apt install portaudio19-dev ffmpeg
+```
 
-You should see "Hello World!" printed to the console.
+### 4. Install Python dependencies
 
-## Dependencies
+#### Editable install (recommended for development)
 
-- [pyaudio](http://_vscodecontentref_/1)
-- [numpy](http://_vscodecontentref_/2)
-- [openwakeword](http://_vscodecontentref_/3)
+```sh
+pip install -e .[dev]
+```
 
-Make sure to install these dependencies using `pip` as shown in the installation steps.# NexusVoice
+This installs the `nexusvoice` package in editable mode and includes development dependencies like `matplotlib`.
 
-NexusVoice is a simple Python project that uses the `pyaudio` and `openwakeword` libraries.
+## Usage
 
-## Installation
+Example scripts that test dev functionality are in examples.  The primary entry points are NexusClient
 
-1. Clone the repository:
-    ```sh
-    git clone https://github.com/yourusername/NexusVoice.git
-    cd NexusVoice
-    ```
+```sh
+python NexusClient.py
+```
 
-2. Create a virtual environment:
-    ```sh
-    python -m venv venv
-    source venv/bin/activate  # On Windows use `venv\Scripts\activate`
-    ```
+## Project Structure
 
-3. Install the required dependencies:
-    ```sh
-    pip install -r requirements.txt
-    ```
+```none
+nexusvoice/         # Core application package  
+examples/           # Demo and test scripts  
+recordings/         # Saved audio recordings  
+models/             # ONNX models (optional, configurable)  
+pyproject.toml      # Project metadata and dependencies
+```
 
-## Running the Project
+## Notes
 
-1. Ensure you have the necessary models downloaded:
-    ```py
-    openwakeword.utils.download_models()
-    ```
+- Ensure `PYTORCH_ENABLE_MPS_FALLBACK=1` is set if you're on a Mac with MPS but need CPU fallback.
+- You may suppress fallback warnings using Python warnings filters (already handled in the app).
 
-2. Run the main script:
-    ```sh
-    python NexusVoice.py
-    ```
+## Dev Dependencies
 
-You should see "Hello World!" printed to the console.
+For contributors or testers, dev dependencies are installed via the `dev` extra:
 
-## Dependencies
+```sh
+pip install -e .[dev]
+```
 
-- [pyaudio](http://_vscodecontentref_/1)
-- [numpy](http://_vscodecontentref_/2)
-- [openwakeword](http://_vscodecontentref_/3)
+This includes optional tools like:
 
-Make sure to install these dependencies using `pip` as shown in the installation steps.
+- `matplotlib` – for plotting or debugging

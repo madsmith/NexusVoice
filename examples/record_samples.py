@@ -1,19 +1,13 @@
-import logging
-from pathlib import Path
 import pyaudio
 import silero_vad
 import torch
-import sys
 
-BASE_DIR = Path(__file__).resolve().parent
-ROOT_DIR = BASE_DIR.parent
-sys.path.append(str(ROOT_DIR))
-
-from audio.AudioDevice import AudioDevice
-from audio.utils import AudioBuffer, AudioData, save_recording, save_recording_mp3
-
-logger = logging.getLogger(__name__)
+from nexusvoice.utils.logging import get_logger
+logger = get_logger(__name__)
 #logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - '%(message)s'")
+
+from nexusvoice.audio.AudioDevice import AudioDevice
+from nexusvoice.audio.utils import AudioBuffer, AudioData, save_recording, save_recording_mp3
 
 AUDIO_FORMAT = pyaudio.paInt16
 SILERO_VAD_AUDIO_CHUNK = 512

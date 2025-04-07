@@ -4,7 +4,6 @@ import threading
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-
 class InferenceEngine:
     def __init__(self, model_id=None):
         self.model_id = model_id

@@ -1,12 +1,4 @@
-import sys
-from pathlib import Path
-
-BASE_DIR = Path(__file__).resolve().parent
-ROOT_DIR = BASE_DIR.parent
-sys.path.append(str(ROOT_DIR))
-
 import pyaudio
-import logging
 from math import ceil
 import numpy as np
 import threading
@@ -15,11 +7,11 @@ import time
 from scipy.signal import stft, istft
 from scipy.ndimage import uniform_filter1d
 
-from utils.logging import get_logger
+from nexusvoice.utils.logging import get_logger
 logger = get_logger(__name__)
 
-from audio.utils import AudioData, PlaybackBuffer, save_recording
-from utils.debug import TimeThis
+from nexusvoice.audio.utils import AudioData, PlaybackBuffer, save_recording
+from nexusvoice.utils.debug import TimeThis
 
 RATE = 16000
 CHUNK = 1024

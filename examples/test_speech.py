@@ -1,15 +1,5 @@
-# Setup the import paths
-from pathlib import Path
-import sys
-
-BASE_DIR = Path(__file__).resolve().parent
-ROOT_DIR = BASE_DIR.parent
-sys.path.append(str(ROOT_DIR))
-
-import init
-
 # Setup logging
-from utils.logging import get_logger
+from nexusvoice.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -18,7 +8,7 @@ import pyaudio
 import torch
 import numpy as np
 
-from ai.TTSInferenceEngine import TTSInferenceEngine
+from nexusvoice.ai.TTSInferenceEngine import TTSInferenceEngine
 
 def tensor_to_int16(audio_tensor: torch.Tensor) -> bytes:
     # Clamp values to avoid overflows
