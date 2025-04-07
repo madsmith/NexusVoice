@@ -20,7 +20,8 @@ logging.basicConfig(level=logging.WARN, format="%(message)s")
 
 from audio.utils import AudioBuffer, AudioRingBuffer, save_recording, save_recording_mp3
 from init import initialize_openwakeword
-from ai_agents import Agent, AgentManager, AudioInferenceEngine
+from ai.AudioInferenceEngine import AudioInferenceEngine
+from ai_agents import Agent, AgentManager
 from config import (
     AUDIO_FORMAT,
     NUMPY_AUDIO_FORMAT,
