@@ -1,14 +1,13 @@
 import numpy as np
 from pathlib import Path
-import sys
 import threading
 import torch
 from transformers import WhisperProcessor, WhisperForConditionalGeneration
 
-from utils.logging import get_logger
+from nexusvoice.utils.logging import get_logger
 logger = get_logger(__name__)
 
-from ai.InferenceEngine import InferenceEngineBase
+from nexusvoice.ai.InferenceEngine import InferenceEngineBase
 
 class AudioInferenceEngine(InferenceEngineBase):
     def __init__(self, model_id):

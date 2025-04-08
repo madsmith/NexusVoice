@@ -22,6 +22,9 @@ dependencies = [
     "speexdsp-ns @ https://github.com/madsmith/speexdsp-python/releases/download/0.1.2/speexdsp_ns-0.1.2-cp312-cp312-macosx_15_0_arm64.whl"
 ]
 
+[project.scripts]
+nexus-client = "nexusvoice.client.main:main"
+
 [project.optional-dependencies]
 dev = [
     "matplotlib>=3.10"

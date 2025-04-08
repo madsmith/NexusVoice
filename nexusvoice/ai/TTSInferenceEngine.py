@@ -2,10 +2,10 @@ from kokoro import KPipeline, KModel
 import threading
 import torch
 
-from utils.logging import get_logger
+from nexusvoice.utils.logging import get_logger
 logger = get_logger(__name__)
 
-from ai.InferenceEngine import InferenceEngineBase
+from nexusvoice.ai.InferenceEngine import InferenceEngineBase
 
 class TTSInferenceEngine(InferenceEngineBase):
     def __init__(self, model_id="hexgrad/Kokoro-82M", voices=None):

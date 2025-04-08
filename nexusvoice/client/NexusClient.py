@@ -6,6 +6,7 @@ import threading
 import numpy as np
 import omegaconf
 from openwakeword.model import Model as OpenWakeWordModel
+import pyaudio
 import silero_vad
 import torch
 import torchaudio
@@ -15,21 +16,24 @@ from nexusvoice.ai.TTSInferenceEngine import TTSInferenceEngine
 from nexusvoice.audio.utils import AudioBuffer
 from nexusvoice.audio.AudioDevice import AudioDevice
 
-from config import (
-    AUDIO_FORMAT,
-    NUMPY_AUDIO_FORMAT,
-    AUDIO_SAMPLE_RATE,
-    AUDIO_CHANNELS,
-    AUDIO_CHUNK,
-    VAD_SILENCE_DURATION,
-    VAD_ACTIVATION_THRESHOLD,
-    ACTIVATION_THRESHOLD
-)
-
-WAKE_WORD_FRAME_CHUNK = 1280
+AUDIO_FORMAT = pyaudio.paInt16
+NUMPY_AUDIO_FORMAT = np.int16
+# OpenWakeWord models are trained on 16kHz audio
+# VAD supports 8kHz, 16kHz, 32kHz, 48kHz
+AUDIO_SAMPLE_RATE = 16000
+# Models are trained on 0.08s audio chunks
+WAKE_WORD_FRAME_CHUNK = 1280 # 0.08 * AUDIO_RATE
+# VAD supports 10ms, 20ms and 30ms audio chunks
+WEBRTC_VAD_AUDIO_CHUNK = 480 # 0.03 * AUDIO_RATE
 SILERO_VAD_AUDIO_CHUNK = 512
+AUDIO_CHUNK = 160 # 0.01 * AUDIO_RATE
+
+VAD_SILENCE_DURATION = 1.5
+VAD_ACTIVATION_THRESHOLD = 0.5
 
 INFERENCE_FRAMEWORK = "onnx"
+ACTIVATION_THRESHOLD = 0.5
+
 
 from nexusvoice.utils.logging import get_logger
 logger = get_logger(__name__)
@@ -369,34 +373,3 @@ class NexusVoiceClient(threading.Thread):
     class CommandProcessAudio(Command):
         def __init__(self, audio_bytes):
             self.audio_bytes = audio_bytes
-
-def main():
-    try:
-        from nexusvoice.utils.logging import StackTraceFormatter
-        # logging.basicConfig(level=logging.DEBUG, format="%(message)s")
-        log_format = "[%(asctime)s] [%(levelname)s] - %(name)s %(message)s"
-        log_format = "[{levelname}]\t{threadName}\t{message}"
-        log_level = logging.DEBUG
-        # log_level = LOG_TRACE_LEVEL
-        handler = logging.StreamHandler()
-        # handler.setFormatter(StackTraceFormatter(log_format, style="{"))
-        handler.setFormatter(logging.Formatter(log_format, style="{"))
-        logging.basicConfig(level=log_level, style="{", format=log_format, handlers=[handler])
-        # log_format = "[%(asctime)s] [%(levelname)s] - %(name)s (%(pathname)s:%(lineno)d): %(message)s"
-        # logging.basicConfig(level=logging.DEBUG, format=log_format)
-
-        logger.debug("Loading config")
-        config = omegaconf.OmegaConf.load("config.yml")
-
-        logger.debug("Creating NexusVoiceClient")
-        client = NexusVoiceClient("test", config)
-        client.start()
-
-        client.join()
-    except KeyboardInterrupt:
-        client.stop()
-    except Exception as e:
-        logger.error(e)
-
-if __name__ == "__main__":
-    main()
