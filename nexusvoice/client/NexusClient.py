@@ -1,6 +1,5 @@
 import nexusvoice.bootstrap
 
-import logging
 import queue
 import threading
 import numpy as np
@@ -15,6 +14,7 @@ from nexusvoice.ai.AudioInferenceEngine import AudioInferenceEngine
 from nexusvoice.ai.TTSInferenceEngine import TTSInferenceEngine
 from nexusvoice.audio.utils import AudioBuffer
 from nexusvoice.audio.AudioDevice import AudioDevice
+from nexusvoice.core.api import NexusAPI, NexusAPILocal
 
 AUDIO_FORMAT = pyaudio.paInt16
 NUMPY_AUDIO_FORMAT = np.int16
@@ -40,11 +40,13 @@ logger = get_logger(__name__)
 
 class NexusVoiceClient(threading.Thread):
     def __init__(self, client_id: str, config: omegaconf.DictConfig):
-        thread_name = f"NexusVoiceClient::{client_id}"
+        thread_name = self._get_thread_name(client_id)
         super().__init__(daemon=True, name=thread_name)
 
         self.client_id = client_id
         self.config = config
+
+        self._api: NexusAPI = None
 
         self.audio_device: AudioDevice = None
         self.command_processor: threading.Thread = None
@@ -65,6 +67,15 @@ class NexusVoiceClient(threading.Thread):
 
         self.running = False
 
+    def _get_thread_name(self, client_id: str = None):
+        return f"NexusVoiceClient::{client_id}"
+    
+    def get_api(self):
+        if self._api is None:
+            logger.error("API not initialized")
+            raise RuntimeError("API not initialized")
+        return self._api
+    
     def initialize(self):
         self._initialize_buffers()
         self._initialize_wake_word_model()
@@ -128,7 +139,7 @@ class NexusVoiceClient(threading.Thread):
             daemon=True)
         
     def run(self):
-        logger.info(f"Starting NexusVoiceClient {self.client_id}")
+        logger.info(f"Starting {self.__class__.__name__} {self.client_id}")
 
         self.initialize()
 
@@ -156,7 +167,7 @@ class NexusVoiceClient(threading.Thread):
             except KeyboardInterrupt:
                 break
             except Exception as e:
-                logger.error(f"Error in NexusVoiceClient: {e}")
+                logger.error(f"Error in {self.getName()}: {e}")
 
         self.stop()
 
@@ -167,7 +178,7 @@ class NexusVoiceClient(threading.Thread):
                 command = self._command_queue.get(timeout=1)
                 logger.debug(f"Processing command {command}")
                 if isinstance(command, NexusVoiceClient.CommandShutdown):
-                    logger.info("Shutting down NexusVoiceClient")
+                    logger.info("Shutting down {self.getName()}")
                     self.stop()
                     break
                 elif isinstance(command, NexusVoiceClient.CommandWakeWord):
@@ -179,6 +190,9 @@ class NexusVoiceClient(threading.Thread):
                 pass
             except Exception as e:
                 logger.error(f"Error processing command: {e}")
+                # Show the traceback
+                import traceback
+                logger.error(traceback.format_exc())
 
     def _process_command_wake_word(self, command):
         logger.debug(f"Received wake word command {command.wake_word}")
@@ -212,14 +226,16 @@ class NexusVoiceClient(threading.Thread):
 
         logger.info(f"Transcription: {transcription}")
 
-        audio_tensor = self._tts_engine.infer(transcription, voice=self.config.tts.voice)
+        response = self.get_api().agent_inference(f"{self.client_id}::agent", transcription)
+
+        logger.info(f"Response: {response} [{type(response)}]")
+
+        audio_tensor = self._tts_engine.infer(response, voice=self.config.tts.voice)
 
         # Convert the audio tensor to numpy array
         audio = self._tensor_to_int16(self._resample_audio(audio_tensor))
 
         self.audio_device.play(audio)
-
-
 
     def _process_vad(self):
         """ Process data in the vad buffer if enough data is available"""
@@ -339,7 +355,7 @@ class NexusVoiceClient(threading.Thread):
 
     def stop(self):
         if self.running:
-            logger.info(f"Stopping NexusVoiceClient {self.client_id}")
+            logger.info(f"Stopping {self.getName()}")
             self.running = False
             
             if self.isRecording():
@@ -373,3 +389,14 @@ class NexusVoiceClient(threading.Thread):
     class CommandProcessAudio(Command):
         def __init__(self, audio_bytes):
             self.audio_bytes = audio_bytes
+
+class NexusVoiceStandalone(NexusVoiceClient):
+    def __init__(self, client_id: str, config: omegaconf.DictConfig):
+        super().__init__(client_id, config)
+        self._api = NexusAPILocal(config)
+
+    def _get_thread_name(self, client_id: str = None):
+        return f"NexusVoiceStandalone::{client_id}"
+    
+    def run(self):
+        super().run()
