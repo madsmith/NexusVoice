@@ -13,10 +13,10 @@ import omegaconf
 from transformers import pipeline, AutoModelForCausalLM, AutoTokenizer
 from transformers import WhisperProcessor, WhisperForConditionalGeneration
 
-from utils.logging import get_logger
+from nexusvoice.utils.logging import get_logger
 logger = get_logger(__name__)
 
-from ai.InferenceEngine import InferenceEnginePool
+from nexusvoice.ai.InferenceEngine import InferenceEnginePool
 
 class Agent(threading.Thread):
     """AI Agent that maintains conversation history and queues inference requests."""
