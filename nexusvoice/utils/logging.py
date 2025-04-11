@@ -4,23 +4,18 @@ import traceback
 LOG_TRACE_LEVEL = logging.DEBUG // 2
 logging.addLevelName(LOG_TRACE_LEVEL, "TRACE")
 
-def trace(self, message, *args, **kwargs):
-    if self.isEnabledFor(LOG_TRACE_LEVEL):
-        self._log(LOG_TRACE_LEVEL, message, args, **kwargs)
+class CustomLogger(logging.Logger):
+    def trace(self, message, *args, **kwargs):
+        if self.isEnabledFor(LOG_TRACE_LEVEL):
+            self._log(LOG_TRACE_LEVEL, message, args, **kwargs)
 
-logging.Logger.trace = trace
+logging.Logger.trace = CustomLogger.trace
+logging.setLoggerClass(CustomLogger)
+
 
 # Function to get a pre-configured logger
-def get_logger(name: str = __name__) -> logging.Logger:
-    logger = logging.getLogger(name)
-    # if not logger.hasHandlers():
-    #     # Configure the logger if it doesn't already have handlers
-    #     handler = logging.StreamHandler()
-    #     formatter = logging.Formatter("[%(levelname)s] %(name)s: %(message)s")
-    #     handler.setFormatter(formatter)
-    #     logger.addHandler(handler)
-    #     logger.setLevel(logging.DEBUG)  # Default level
-    return logger
+def get_logger(name: str = __name__) -> CustomLogger:
+        return logging.getLogger(name)  # Returns an instance of CustomLogger
 
 class StackTraceFormatter(logging.Formatter):
     def format(self, record):
