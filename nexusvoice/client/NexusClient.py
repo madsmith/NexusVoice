@@ -15,6 +15,8 @@ from nexusvoice.ai.TTSInferenceEngine import TTSInferenceEngine
 from nexusvoice.audio.utils import AudioBuffer
 from nexusvoice.audio.AudioDevice import AudioDevice
 from nexusvoice.core.api import NexusAPI, NexusAPILocal
+from nexusvoice.protocol.mcp import UserMessage
+
 
 AUDIO_FORMAT = pyaudio.paInt16
 NUMPY_AUDIO_FORMAT = np.int16
@@ -185,6 +187,8 @@ class NexusVoiceClient(threading.Thread):
                     self._process_command_wake_word(command)
                 elif isinstance(command, NexusVoiceClient.CommandProcessAudio):
                     self._process_command_process_audio(command)
+                elif isinstance(command, NexusVoiceClient.CommandProcessText):
+                    self._process_command_process_text(command)
             except queue.Empty:
                 # No command to process
                 pass
@@ -226,11 +230,21 @@ class NexusVoiceClient(threading.Thread):
 
         logger.info(f"Transcription: {transcription}")
 
-        response = self.get_api().agent_inference(f"{self.client_id}::agent", transcription)
+        self._do_text_inference(transcription)
 
-        logger.info(f"Response: {response} [{type(response)}]")
+    def _process_command_process_text(self, command):
+        text = command.text
 
-        audio_tensor = self._tts_engine.infer(response, voice=self.config.tts.voice)
+        self._do_text_inference(text)
+
+    def _do_text_inference(self, text):
+        # replace raw input with MCP-formatted user message
+        user_msg = UserMessage(text=text)
+        response = self.get_api().mcp_agent_inference(agent_id="main", mcp_input=user_msg)
+
+        logger.info(f"Response: {response.text}")
+        
+        audio_tensor = self._tts_engine.infer(response.text, voice=self.config.tts.voice)
 
         # Convert the audio tensor to numpy array
         audio = self._tensor_to_int16(self._resample_audio(audio_tensor))
@@ -389,6 +403,10 @@ class NexusVoiceClient(threading.Thread):
     class CommandProcessAudio(Command):
         def __init__(self, audio_bytes):
             self.audio_bytes = audio_bytes
+
+    class CommandProcessText(Command):
+        def __init__(self, text):
+            self.text = text
 
 class NexusVoiceStandalone(NexusVoiceClient):
     def __init__(self, client_id: str, config: omegaconf.DictConfig):

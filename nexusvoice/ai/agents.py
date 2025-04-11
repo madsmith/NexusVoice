@@ -1,18 +1,15 @@
-from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor, Future, as_completed
-from dataclasses import dataclass
 from enum import Enum
 import os
 import threading
 import queue
 import random
 import threading
+from typing import List
 
 import omegaconf
 
-from transformers import pipeline, AutoModelForCausalLM, AutoTokenizer
-from transformers import WhisperProcessor, WhisperForConditionalGeneration
-
+from nexusvoice.protocol.mcp import MCPMessage, ModelMessage, ToolResult, UserMessage
 from nexusvoice.utils.logging import get_logger
 logger = get_logger(__name__)
 
@@ -50,6 +47,13 @@ class Agent(threading.Thread):
         self.request_queue.put((prompt, future))
         return future  # Caller retrieves the result later
 
+    def process_tool_response(self, tool_responses: List[ToolResult]) -> Future[ModelMessage]:
+        """Queues a tool response for processing and returns a Future immediately."""
+        future: Future[ModelMessage] = Future()
+        logger.debug(f"[Agent {self.agent_id}]: Received tool response '{tool_responses}'")
+        self.request_queue.put((tool_responses, future))
+        return future
+    
     def _init_conversation(self):
         """Initializes the conversation history."""
         self.history = []
@@ -68,6 +72,7 @@ class Agent(threading.Thread):
             "Notes: - The system should be able to handle multiple devices and rooms in a single request."
             " - Be short and to the point in your responses.  Explaining your reasoning is not necessary."
         )
+        system_prompt = self.config.llm.system_prompt or system_prompt
 
         system_message = { "role": "system", "content": system_prompt }
         self.history.append(system_message)
@@ -87,32 +92,78 @@ class Agent(threading.Thread):
         self.running = True        
         self.is_ready_event.set()
 
-
         while self.running:
             try:
-                prompt, future = self.request_queue.get()
-                if prompt == Agent.AgentCommand.SHUTDOWN or not self.running:
+                request, future = self.request_queue.get()
+                if request == Agent.AgentCommand.SHUTDOWN or not self.running:
                     break  # Exit thread gracefully
                 
-                logger.debug(f"[Agent {self.agent_id}]: Processing request '{prompt}'...")
-                self._process_request(prompt, future)
+                # Handle MCP style requests
+                is_MCP_list = isinstance(request, List) and all(isinstance(item, MCPMessage) for item in request)
+                is_MCP = isinstance(request, MCPMessage) or is_MCP_list
+                if is_MCP:
+                    logger.debug(f"[Agent {self.agent_id}]: Processing MCP request '{request}'...")
+                    self._process_mcp_request(request, future)
+                else:
+                    # Handle regular requests (presumptively strings) 
+                    logger.debug(f"[Agent {self.agent_id}]: Processing request '{request}'...")
+                    self._process_request(request, future)
             except queue.Empty:
                 continue  # No requests, keep running
+
+    def _process_mcp_request(self, request, future):
+        """ Handle the MCP Message and infer a new response, fullfilling the future. """
+        if isinstance(request, UserMessage):
+            self.history.append({"role": "user", "content": request.text})
+            
+            result_text = self._run_inference()
+
+            self.history.append({"role": "assistant", "content": result_text})
+
+            # Wrap the result in a ModelMessage
+            try:
+                message = ModelMessage.model_validate_json(result_text)
+            except Exception:
+                message = ModelMessage(text=result_text)
+
+            future.set_result(message)
+
+        elif isinstance(request, List) and all(isinstance(item, ToolResult) for item in request):
+            for tool_result in request:
+                # ID is currently not supported by the chat template
+                self.history.append({
+                    "role": "tool",
+                    id: tool_result.id,
+                    "content": tool_result.output
+                })
+
+            result_text = self._run_inference()
+
+            self.history.append({"role": "assistant", "content": result_text})
+
+            # Wrap the result in a ModelMessage
+            try:
+                message = ModelMessage.model_validate_json(result_text)
+            except Exception:
+                message = ModelMessage(text=result_text)
+
+            future.set_result(message)
+    
 
     def _process_request(self, prompt, future):
         """Handles request processing and delegates inference."""
         self.history.append({"role": "user", "content": prompt})
 
         # Submit inference task to the inference executor
-        result = self._infer(prompt)
+        result = self._run_inference()
 
         self.history.append({"role": "assistant", "content": result})
 
         future.set_result(result)  # Complete the future
 
-    def _infer(self, prompt):
+    def _run_inference(self):
         """Simulates AI inference (Replace with actual AI model call)."""
-        logger.debug(f"[Agent {self.agent_id}] Running inference '{prompt}'...")
+        logger.debug(f"[Agent {self.agent_id}] Running inference...")
 
         tokenizer = self.inference_engine.getTokenizer()
         tokenizer.pad_token = tokenizer.eos_token
@@ -130,7 +181,7 @@ class Agent(threading.Thread):
         with self.resource_pool.getResourceLock("Llama-3.2"):
             inference_engine.loadResource()
             # Perform inference
-            print(tokenizer.pad_token)
+            logger.trace(f"[Agent {self.agent_id}] Chat History: {chat_history}")
             inputs = tokenizer.encode(
                 chat_history,
                 add_special_tokens=False,

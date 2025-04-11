@@ -13,6 +13,8 @@ dependencies = [
     "openai~=1.65",
     "omegaconf>=2.3",
     "pydub~=0.25",
+    "pydantic>=2.11.2",
+    "requests>=2.32.3",
     "setuptools",
     "silero==0.4.1",
     "silero-vad==5.1.2",
