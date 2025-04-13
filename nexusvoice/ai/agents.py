@@ -166,7 +166,6 @@ class Agent(threading.Thread):
         logger.debug(f"[Agent {self.agent_id}] Running inference...")
 
         tokenizer = self.inference_engine.getTokenizer()
-        tokenizer.pad_token = tokenizer.eos_token
         
         inference_engine = self.resource_pool.getResource(
             "Llama-3.2",
