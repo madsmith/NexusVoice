@@ -159,8 +159,6 @@ def save_recording(recording, filename):
         wave_file.setsampwidth(sample_width)
         wave_file.setframerate(sample_rate)
         wave_file.writeframes(frames)
-    
-    logger.info(f"Recording saved to {filename}")
 
 def save_recording_mp3(recording, filename):
     if isinstance(filename, str):
@@ -190,9 +188,6 @@ def save_recording_mp3(recording, filename):
     
     with open(filename, "wb") as mp3_file:
         recording.export(mp3_file, format="mp3")
-
-
-    logger.info(f"Recording saved to {filename}")
 
 
 
