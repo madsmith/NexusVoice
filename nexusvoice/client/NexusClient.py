@@ -2,17 +2,20 @@ import nexusvoice.bootstrap
 
 import queue
 import threading
+import logging
 import numpy as np
 import omegaconf
 from openwakeword.model import Model as OpenWakeWordModel
+from pathlib import Path
 import pyaudio
 import silero_vad
+import time
 import torch
 import torchaudio
 
 from nexusvoice.ai.AudioInferenceEngine import AudioInferenceEngine
 from nexusvoice.ai.TTSInferenceEngine import TTSInferenceEngine
-from nexusvoice.audio.utils import AudioBuffer
+from nexusvoice.audio.utils import AudioBuffer, save_recording
 from nexusvoice.audio.AudioDevice import AudioDevice
 from nexusvoice.core.api import NexusAPI, NexusAPILocal
 from nexusvoice.protocol.mcp import UserMessage
@@ -65,7 +68,7 @@ class NexusVoiceClient(threading.Thread):
         self._speech_buffer: AudioBuffer = None
         
         self._silence_duration = 0
-        self._isRecording = threading.Event()
+        self._recording_state = RecordingState()
 
         self.running = False
 
@@ -170,6 +173,10 @@ class NexusVoiceClient(threading.Thread):
                 break
             except Exception as e:
                 logger.error(f"Error in {self.getName()}: {e}")
+                if logger.isEnabledFor(logging.DEBUG):
+                    # Show the traceback
+                    import traceback
+                    logger.error(traceback.format_exc())
 
         self.stop()
 
@@ -203,6 +210,9 @@ class NexusVoiceClient(threading.Thread):
         if not self._confirm_wake_word(command):
             logger.debug(f"Wake word {command.wake_word} not confirmed")
             self.stopRecording(cancel=True)
+        else:
+            logger.trace("Wake word {command.wake_word} confirmed")
+            self.startRecording(confirmed=True)
 
     def _resample_audio(self, audio_tensor: torch.Tensor, orig_freq=24000, new_freq=16000):
         # Add batch dimension if needed
@@ -222,11 +232,20 @@ class NexusVoiceClient(threading.Thread):
         return audio_int16.numpy().tobytes()
         
     def _process_command_process_audio(self, command):
+        if hasattr(self, "save_recordings") and self.save_recordings:
+            # Create the recordings directory if it doesn't exist
+            Path("recordings").mkdir(parents=True, exist_ok=True)
+
+            filename = Path("recordings", f"recording_{self.client_id}_{int(time.time())}_audio.wav")
+            save_recording(command.audio_bytes, filename)
+            logger.info(f"Saved recording to {filename}")
 
         # Convert audio bytes into numpy array
         np_audio = np.frombuffer(command.audio_bytes, dtype=NUMPY_AUDIO_FORMAT)
 
         transcription = self._whisper_engine.infer(np_audio, AUDIO_SAMPLE_RATE)
+
+        transcription = transcription.strip()
 
         logger.info(f"Transcription: {transcription}")
 
@@ -271,20 +290,26 @@ class NexusVoiceClient(threading.Thread):
             vad_score = self.vad_model(torch_audio, AUDIO_SAMPLE_RATE).item()
 
             is_speech = vad_score > VAD_ACTIVATION_THRESHOLD
+
             if is_speech:
                 logger.trace(f"VAD score: {vad_score}")
                 self._silence_duration = 0
             else:
                 self._silence_duration += SILERO_VAD_AUDIO_CHUNK / AUDIO_SAMPLE_RATE
 
-            if is_speech or self._silence_duration < VAD_SILENCE_DURATION or self.isRecording():
-                self._speech_buffer.append(audio_frames)
-            else:
-                self._speech_buffer.clear()
 
-            if self.isRecording() and self._silence_duration > VAD_SILENCE_DURATION:
-                logger.debug(f"VAD silence duration {self._silence_duration} exceeded threshold")
-                self.stopRecording()
+            if is_speech or self._recording_state.is_recording():
+                self._speech_buffer.append(audio_frames)
+
+            if self._silence_duration > VAD_SILENCE_DURATION:
+                if self._recording_state.is_recording():
+                    if self._recording_state.is_confirmed():
+                        logger.debug("Silence detected, stopping recording")
+                        self.stopRecording()
+                else:
+                    logger.trace("Silence detected, clearing speech buffer")
+                    self._speech_buffer.clear()
+
 
     def _process_wake_word(self):
         if self._wake_word_buffer.frame_count() >= WAKE_WORD_FRAME_CHUNK:
@@ -322,6 +347,17 @@ class NexusVoiceClient(threading.Thread):
 
         transcription = self._whisper_engine.infer(np_audio, AUDIO_SAMPLE_RATE)
 
+        if hasattr(self, "save_recordings") and self.save_recordings:
+            # Create the recordings directory if it doesn't exist
+            Path("recordings").mkdir(parents=True, exist_ok=True)
+            
+            # Save the recording to a file
+            filename = Path("recordings", f"recording_{self.client_id}_{int(time.time())}_wakeword.wav")
+            save_recording(command.audio_bytes, filename)
+            logger.info(f"Saved recording to {filename}")
+
+        transcription = transcription.strip()
+
         logger.debug(f"Transcription: {transcription}")
 
         model_conf = omegaconf.OmegaConf.select(self.config, "wake_word.models")
@@ -347,34 +383,40 @@ class NexusVoiceClient(threading.Thread):
             
         logger.debug(f"Wake word {command.wake_word} not confirmed with transcription {transcription}")
         return False
-
-    def isRecording(self):
-        return self._isRecording.is_set()
     
-    def startRecording(self):
-        self._isRecording.set()
+    def startRecording(self, confirmed=False):
         logger.debug("Recording started")
+        self._recording_state.start()
+        if confirmed:
+            self._recording_state.confirm()
 
     def stopRecording(self, cancel=False):
-        self._isRecording.clear()
         if cancel:
             logger.debug("Recording cancelled")
+            self._recording_state.stop()
+        elif not self._recording_state.is_confirmed:
+            logger.trace("Recording not yet confirmed")
+            return
         else:
             logger.debug("Recording stopped")
+            self._recording_state.stop()
             audio_data = self._speech_buffer.get_bytes()
+            logger.debug(f"Audio data length: {len(audio_data)}")
+
             if not audio_data:
                 logger.warning("No audio data to process")
-            else:
-                self.add_command(NexusVoiceClient.CommandProcessAudio(audio_data))
+                return
+            
+            self.add_command(NexusVoiceClient.CommandProcessAudio(audio_data))
 
     def stop(self):
         if self.running:
             logger.info(f"Stopping {self.getName()}")
             self.running = False
             
-            if self.isRecording():
+            if self._recording_state.is_recording():
                 self._speech_buffer.clear()
-                self.stopRecording()
+                self.stopRecording(cancel=True)
 
             self.audio_device.shutdown()
 
@@ -418,3 +460,35 @@ class NexusVoiceStandalone(NexusVoiceClient):
     
     def run(self):
         super().run()
+
+class RecordingState:
+    STOPPED = 0
+    RECORDING = 1
+    PENDING = 2
+
+    def __init__(self):
+        self.state = RecordingState.STOPPED
+        self._lock = threading.Lock()
+
+    def is_recording(self):
+        with self._lock:
+            return self.state != RecordingState.STOPPED
+        
+    def is_confirmed(self):
+        with self._lock:
+            return self.state == RecordingState.RECORDING
+        
+    def start(self):
+        with self._lock:
+            self.state = RecordingState.PENDING
+
+    def stop(self):
+        with self._lock:
+            self.state = RecordingState.STOPPED
+
+    def confirm(self):
+        with self._lock:
+            self.state = RecordingState.RECORDING
+
+    def __str__(self):
+        return self.state.name
