@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import json
 from omegaconf import OmegaConf
 
 import requests
@@ -24,7 +25,6 @@ def register_tool(tool_name: str):
     return decorator
 
 @register_tool("get_weather")
-
 def get_weather_tool(input: dict):
     city = input.get("city", "New York")
     config = OmegaConf.load("config.yml")
@@ -43,6 +43,14 @@ def get_weather_tool(input: dict):
         "city": data["location"]["name"],
         "temp_f": data["current"]["temp_f"],
         "condition": data["current"]["condition"]["text"]
+    }
+
+@register_tool("get_date_and_time")
+def get_date_and_time(input: dict):
+    import datetime
+    now = datetime.datetime.now()
+    return {
+        "time": now.strftime("%Y-%m-%d %H:%M:%S")
     }
 
 class NexusAPI(ABC):
@@ -107,7 +115,7 @@ class NexusAPILocal(NexusAPI):
 
         # Try to parse as ToolCall
         try:
-            parsed = ModelMessage.model_validate_json(result_text)
+            parsed = ModelMessage.model_validate_json(try_repair_json(result_text))
         except Exception:
             return ModelMessage(text=result_text)
 
@@ -127,3 +135,35 @@ class NexusAPILocal(NexusAPI):
 
         else:
             return parsed
+
+def try_repair_json(text):
+    text = text.strip()
+
+    # Simple fence cleaner
+    if text.startswith("```json"):
+        text = text[7:]
+    if text.endswith("```"):
+        text = text[:-3]
+
+    # Try direct parse first
+    try:
+        json.loads(text)
+        return text
+    except json.JSONDecodeError as e:
+        # Try to patch one missing } at end
+        fixed = text + "}"
+        try:
+            json.loads(fixed)
+            return fixed
+        except:
+            pass
+
+        # Try to close a possibly open string + } at end
+        fixed = text + '"}'
+        try:
+            json.loads(fixed)
+            return fixed
+        except:
+            pass
+
+        raise ValueError(f"Incomplete or invalid JSON: {e}")
