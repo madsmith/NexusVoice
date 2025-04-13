@@ -27,13 +27,15 @@ class InferenceEngine:
 
     def initTokenizer(self):
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_id)
-        self.tokenizer.pad_token = self.tokenizer.eos_token
+        self.tokenizer.add_special_tokens({"pad_token": "<|pad_id|>"})
 
     def initModel(self):
         self.model = AutoModelForCausalLM.from_pretrained(
             self.model_id,
             torch_dtype=torch.bfloat16
         ).to(self.device)
+
+        self.model.resize_token_embeddings(len(self.tokenizer))
 
     def infer(self, inputs, **inference_params):
         """ Take the unencoded inputs, encode them and generate an output """
