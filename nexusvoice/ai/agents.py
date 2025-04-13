@@ -195,6 +195,7 @@ class Agent(threading.Thread):
             outputs = inference_engine.generate(
                 inputs,
                 attention_mask=attention_mask,
+                pad_token_id=tokenizer.pad_token_id,
                 max_length=4096)
             
             new_outputs = outputs[0, input_length:]
