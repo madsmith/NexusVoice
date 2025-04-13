@@ -10,7 +10,7 @@ from scipy.ndimage import uniform_filter1d
 from nexusvoice.utils.logging import get_logger
 logger = get_logger(__name__)
 
-from nexusvoice.audio.utils import AudioData, PlaybackBuffer, save_recording
+from nexusvoice.audio.utils import AudioData, PlaybackBuffer
 from nexusvoice.utils.debug import TimeThis
 
 RATE = 16000
