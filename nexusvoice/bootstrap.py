@@ -23,6 +23,11 @@ def suppress_warnings():
         "ignore", message="`torch.nn.utils.weight_norm` is deprecated in favor", category=FutureWarning
     )
 
+    from transformers.utils import logging
+
+    logging.set_verbosity_error()
+    logging.disable_progress_bar()
+
 def initialize_openwakeword():
     model_paths = openwakeword.get_pretrained_model_paths()
 
