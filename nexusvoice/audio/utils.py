@@ -1,7 +1,9 @@
 from abc import ABC, abstractmethod
 import logging
 from pathlib import Path
+from typing import Optional
 import numpy as np
+from numpy.typing import DTypeLike
 import pyaudio
 from pydub import AudioSegment
 import wave
@@ -16,46 +18,46 @@ CHANNELS = 1
 
 class AudioBufferBase(ABC):
     def __init__(self, sample_rate=SAMPLE_RATE, format=AUDIO_FORMAT, channels=CHANNELS):
-        self._sample_rate = sample_rate
-        self._audio_format = format
-        self._channels = channels
-        self._frame_size = pyaudio.get_sample_size(format) * self._channels
+        self._sample_rate: int = sample_rate
+        self._audio_format: int = format
+        self._channels: int = channels
+        self._frame_size: int = pyaudio.get_sample_size(format) * self._channels
 
-    def get_channels(self):
+    def get_channels(self) -> int:
         return self._channels
     
-    def get_sample_rate(self):
+    def get_sample_rate(self) -> int:
         return self._sample_rate
     
-    def get_audio_format(self):
+    def get_audio_format(self) -> int:
         return self._audio_format
     
-    def get_sample_size(self):
+    def get_sample_size(self) -> int:
         return pyaudio.get_sample_size(self._audio_format)
 
     @abstractmethod
-    def append(self, chunk):
+    def append(self, chunk) -> None:
         pass
 
     @abstractmethod
-    def get_bytes(self):
+    def get_bytes(self) -> bytes:
         pass
 
     @abstractmethod
-    def byte_count(self):
+    def byte_count(self) -> int:
         pass
 
     @abstractmethod
-    def clear(self):
+    def clear(self) -> None:
         pass
 
-    def __len__(self):
+    def __len__(self) -> int:
         return self.frame_count()
 
-    def frame_count(self):
+    def frame_count(self) -> int:
         return self.byte_count() // self._frame_size
 
-    def get_frames(self):
+    def get_frames(self) -> np.ndarray:
         np_dtype = self._frame_size_to_numpy()
         audio_data = np.frombuffer(self.get_bytes(), dtype=np_dtype)
 
@@ -63,10 +65,10 @@ class AudioBufferBase(ABC):
             audio_data = audio_data.reshape(-1, self._channels)
         return audio_data
 
-    def get_duration_ms(self):
+    def get_duration_ms(self) -> float:
         return self.frame_count() / self._sample_rate * 1000
 
-    def _frame_size_to_numpy(self):
+    def _frame_size_to_numpy(self) -> DTypeLike:
         # convert frame size to numpy dtype
         if self._frame_size == 1:
             return np.uint8
@@ -94,23 +96,14 @@ class AudioBuffer(AudioBufferBase):
 
         self.chunks.append(chunk)
 
-    def get_bytes(self):
+    def get_bytes(self) -> bytes:
         return b"".join(self.chunks)
 
-    def byte_count(self):
+    def byte_count(self) -> int:
         return sum(len(chunk) for chunk in self.chunks)
 
     def clear(self):
         self.chunks.clear()
-        # convert frame size to numpy dtype
-        if self._frame_size == 1:
-            return np.uint8
-        elif self._frame_size == 2:
-            return np.int16
-        elif self._frame_size == 4:
-            return np.int32
-        else:
-            raise ValueError(f"Unsupported frame size {self._frame_size}")
 
 class AudioRingBuffer(AudioBufferBase):
     def __init__(self, sample_rate=SAMPLE_RATE, format=AUDIO_FORMAT, channels=CHANNELS, max_duration=1.0):
@@ -124,13 +117,13 @@ class AudioRingBuffer(AudioBufferBase):
             chunk = chunk.tobytes()
         self.buffer.append(chunk)
 
-    def get_bytes(self):
-        return self.buffer.get_bytes()
+    def get_bytes(self) -> bytes:
+        return bytes(self.buffer.get_bytes())
     
-    def byte_count(self):
+    def byte_count(self) -> int:
         return self.buffer.byte_count()
     
-    def clear(self):
+    def clear(self) -> None:
         self.buffer.clear()
 
 def save_recording(recording, filename):
@@ -199,7 +192,7 @@ import time
 import pyaudio
 
 class AudioData:
-    def __init__(self, frames: bytes, format=pyaudio.paInt16, channels=1, rate=16000, timestamp=None):
+    def __init__(self, frames: bytes, format=pyaudio.paInt16, channels=1, rate=16000, timestamp: Optional[float] = None):
         assert isinstance(frames, bytes) or isinstance(frames, np.ndarray), f"frames must be of type bytes or numpy ndarray, not {type(frames)}"
         # Format describes how many audio bytes are in each sample
         self.format = format
@@ -209,9 +202,7 @@ class AudioData:
             self.frames = frames.tobytes()
         else:
             self.frames = frames
-        self.timestamp = timestamp
-        if not timestamp:
-            self.timestamp = time.perf_counter()
+        self.timestamp = timestamp or time.perf_counter()
 
     def as_bytes(self) -> bytes:
         """ Return raw audio bytes """
@@ -258,16 +249,7 @@ class AudioData:
 
     @classmethod
     def sample_width_to_format(cls, sample_width: int):
-        if sample_width == 1:
-            return pyaudio.paInt8
-        elif sample_width == 2:
-            return pyaudio.paInt16
-        elif sample_width == 4:
-            return pyaudio.paInt32
-        elif sample_width == 8:
-            return pyaudio.paFloat64
-        else:
-            raise ValueError(f"Unsupported sample width {sample_width}")
+        return pyaudio.get_format_from_width(sample_width)
 
     @classmethod
     def from_wave(cls, filename):

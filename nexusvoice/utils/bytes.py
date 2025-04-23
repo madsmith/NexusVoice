@@ -1,3 +1,4 @@
+from typing import Iterator
 from nexusvoice.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -10,7 +11,7 @@ class ByteRingBuffer:
         self.end = 0
         self.size = 0
 
-    def append(self, data):
+    def append(self, data) -> None:
         data_size = len(data)
 
         if data_size > self.max_size:
@@ -44,45 +45,45 @@ class ByteRingBuffer:
         if self.size == self.max_size:
             self.start = data_end
 
-    def get_bytes(self):
+    def get_bytes(self) -> bytearray:
         if self.size == 0:
-            return b""
+            return bytearray()
         
         if self.start < self.end:
             return self.buffer[self.start:self.end]
         else:
             return self.buffer[self.start:] + self.buffer[:self.end]
 
-    def byte_count(self):
+    def byte_count(self) -> int:
         return self.size
 
-    def clear(self):
+    def clear(self) -> None:
         self.start = 0
         self.end = 0
         self.size = 0
 
-    def __len__(self):
+    def __len__(self) -> int:
         return self.size
 
-    def __bool__(self):
+    def __bool__(self) -> bool:
         return bool(self.size)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"ByteRingBuffer({self.buffer}, {self.start}, {self.end}, {self.size}/{self.max_size})"
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"ByteRingBuffer({self.size}/{self.max_size})"
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[int]:
         return iter(self.get_bytes())
 
-    def __getitem__(self, key):
+    def __getitem__(self, key) -> bytearray:
         if isinstance(key, slice):
             return self.get_bytes()[key]
         else:
             return self.get_bytes()[key]
 
-    def __setitem__(self, key, value):
+    def __setitem__(self, key, value) -> None:
         raise NotImplementedError("Cannot set individual bytes in ByteRingBuffer")
     
 
