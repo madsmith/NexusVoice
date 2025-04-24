@@ -15,6 +15,9 @@ __pycache__
 *.pyc
 latest_silero_models.yml
 
+# Model files
+nexusvoice/models/distilbert-nexus*
+
 .DS_Store
 pyrightconfig.json
 response.mp3
