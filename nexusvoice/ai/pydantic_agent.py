@@ -1,18 +1,16 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Generic, Optional, List, Literal, Dict, TypeVar, Union, Awaitable, Callable, cast
-from typing_extensions import Concatenate, ParamSpec
+from typing import Generic, List, TypeVar
+from typing_extensions import ParamSpec
 from nexusvoice.core.config import NexusConfig
-from pydantic.types import _JSON_TYPES
 from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.openai import OpenAIProvider
-from torch.nn import parameter
 from transformers import AutoConfig
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
-from pydantic_ai.agent import AgentRunResult, ToolFuncContext, RunContext, ToolParams
+from pydantic_ai.agent import AgentRunResult, ToolFuncContext
 from pydantic_ai.models.function import FunctionModel, AgentInfo
-from pydantic_ai.messages import ModelMessage, TextPart, ModelResponsePart, ToolCallPart, ToolReturnPart, UserPromptPart
+from pydantic_ai.messages import ModelMessage, TextPart, ModelResponsePart, ToolCallPart, UserPromptPart
 import torch
 from transformers import pipeline
 from pathlib import Path
