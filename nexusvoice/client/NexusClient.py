@@ -1,8 +1,11 @@
+from typing import Optional
+from nexusvoice.ai.pydantic_agent import ModelResponse, PydanticAgent
 import nexusvoice.bootstrap
 
 import queue
 import threading
 import logging
+from nexusvoice.core.config import NexusConfig
 import numpy as np
 import omegaconf
 from openwakeword.model import Model as OpenWakeWordModel
@@ -10,6 +13,7 @@ from pathlib import Path
 import pyaudio
 import silero_vad
 import time
+from silero_vad.model import OnnxWrapper
 import torch
 import torchaudio
 
@@ -17,7 +21,9 @@ from nexusvoice.ai.AudioInferenceEngine import AudioInferenceEngine
 from nexusvoice.ai.TTSInferenceEngine import TTSInferenceEngine
 from nexusvoice.audio.utils import AudioBuffer, save_recording
 from nexusvoice.audio.AudioDevice import AudioDevice
-from nexusvoice.core.api import NexusAPI, NexusAPILocal
+from nexusvoice.core.api import NexusAPI
+from nexusvoice.core.api.local import NexusAPILocal
+from nexusvoice.core.api.online import NexusAPIOnline
 from nexusvoice.protocol.mcp import UserMessage
 
 
@@ -44,35 +50,66 @@ from nexusvoice.utils.logging import get_logger
 logger = get_logger(__name__)
 
 class NexusVoiceClient(threading.Thread):
-    def __init__(self, client_id: str, config: omegaconf.DictConfig):
+    def __init__(self, client_id: str, config: NexusConfig):
         thread_name = self._get_thread_name(client_id)
         super().__init__(daemon=True, name=thread_name)
 
         self.client_id = client_id
         self.config = config
 
-        self._api: NexusAPI = None
+        self._api: Optional[NexusAPI] = None
 
-        self.audio_device: AudioDevice = None
-        self.command_processor: threading.Thread = None
+        self._audio_device: Optional[AudioDevice] = None
+        self.command_processor: Optional[threading.Thread] = None
 
-        self.wake_word_model: OpenWakeWordModel = None
-        self._vad_model = None
-        self._whisper_engine: AudioInferenceEngine = None   
-        self._tts_engine: TTSInferenceEngine = None
-
+        self._wake_word_model: Optional[OpenWakeWordModel] = None
+        self._vad_model: Optional[OnnxWrapper] = None
+        self._whisper_engine: Optional[AudioInferenceEngine] = None   
+        self._tts_engine: Optional[TTSInferenceEngine] = None
+        self._agent: Optional[PydanticAgent] = None   
+        
         self._command_queue = queue.Queue()
 
-        self._vad_buffer: AudioBuffer = None
-        self._wake_word_buffer: AudioBuffer = None
-        self._speech_buffer: AudioBuffer = None
+        self._wake_word_buffer: AudioBuffer = AudioBuffer(format=AUDIO_FORMAT)
+        self._vad_buffer: AudioBuffer = AudioBuffer(format=AUDIO_FORMAT)
+        self._speech_buffer: AudioBuffer = AudioBuffer(format=AUDIO_FORMAT)
         
         self._silence_duration = 0
         self._recording_state = RecordingState()
 
         self.running = False
 
-    def _get_thread_name(self, client_id: str = None):
+    @property
+    def audio_device(self) -> AudioDevice:
+        assert self._audio_device is not None, f"{self.__class__.__name__} not initialized, audio device not available"
+        return self._audio_device
+
+    @property
+    def wake_word_model(self) -> OpenWakeWordModel:
+        assert self._wake_word_model is not None, f"{self.__class__.__name__} not initialized, wake word model not available"
+        return self._wake_word_model
+
+    @property
+    def vad_model(self) -> OnnxWrapper:
+        assert self._vad_model is not None, f"{self.__class__.__name__} not initialized, vad model not available"
+        return self._vad_model
+
+    @property
+    def whisper_engine(self) -> AudioInferenceEngine:
+        assert self._whisper_engine is not None, f"{self.__class__.__name__} not initialized, whisper engine not available"
+        return self._whisper_engine
+
+    @property
+    def tts_engine(self) -> TTSInferenceEngine:
+        assert self._tts_engine is not None, f"{self.__class__.__name__} not initialized, tts engine not available"
+        return self._tts_engine
+
+    @property
+    def agent(self) -> PydanticAgent:
+        assert self._agent is not None, f"{self.__class__.__name__} not initialized, agent not available"
+        return self._agent
+
+    def _get_thread_name(self, client_id: str = "") -> str:
         return f"NexusVoiceClient::{client_id}"
     
     def get_api(self):
@@ -82,11 +119,11 @@ class NexusVoiceClient(threading.Thread):
         return self._api
     
     def initialize(self):
-        self._initialize_buffers()
         self._initialize_wake_word_model()
         self._initialize_VAD_model()
         self._initialize_whisper_model()
         self._initialize_TTS_model()
+        self._initialize_agent()
 
         self._initialize_threads()
 
@@ -94,26 +131,21 @@ class NexusVoiceClient(threading.Thread):
 
     def _initialize_audio_device(self):
         logger.info("Initializing audio device")
-        self.audio_device = AudioDevice()
-        self.audio_device.set_sample_delay(self.config.audio.get("sample_delay", -2200))
 
-    def _initialize_buffers(self):
-        logger.info("Initializing buffers")
-        self._wake_word_buffer = AudioBuffer(format=AUDIO_FORMAT)
-        self._vad_buffer = AudioBuffer(format=AUDIO_FORMAT)
-        self._speech_buffer = AudioBuffer(format=AUDIO_FORMAT)
+        self._audio_device = AudioDevice()
+        self._audio_device.set_sample_delay(self.config.get("audio.sample_delay", -2200))
 
     def _initialize_wake_word_model(self):
         logger.info("Initializing wake word model")
 
-        model_conf = omegaconf.OmegaConf.select(self.config, "wake_word.models")
+        model_conf = self.config.get("wake_word.models")
         if model_conf is None:
             logger.error("No wake word models found in config")
             raise RuntimeError("No wake word models found in config")
 
         models = [m.path if "path" in m else m.name for m in model_conf]
         
-        self.wake_word_model = OpenWakeWordModel(
+        self._wake_word_model = OpenWakeWordModel(
             wakeword_models=models,
             inference_framework=INFERENCE_FRAMEWORK,
             enable_speex_noise_suppression=True
@@ -121,22 +153,36 @@ class NexusVoiceClient(threading.Thread):
 
     def _initialize_VAD_model(self):
         logger.info("Initializing VAD model")
-        self.vad_model = silero_vad.load_silero_vad()
+
+        vad_model = silero_vad.load_silero_vad()
+        if vad_model is None:
+            logger.error("Failed to load VAD model")
+            raise RuntimeError("Failed to load VAD model")
+        self._vad_model = vad_model
 
     def _initialize_whisper_model(self):
         logger.info("Initializing Whisper STT...")
+
         model = self.config.whisper.processor.get("model", "openai/whisper-large-v2")
         self._whisper_engine = AudioInferenceEngine(model)
         self._whisper_engine.initialize()
 
     def _initialize_TTS_model(self):
         logger.info("Initializing TTS model...")
+
         voice = self.config.tts.get("voice", None)
         self._tts_engine = TTSInferenceEngine(voices=voice)
         self._tts_engine.initialize()
 
+    def _initialize_agent(self):
+        logger.info("Initializing agent...")
+
+        self._agent = PydanticAgent(self.config, self.client_id)
+        self._agent.start()
+
     def _initialize_threads(self):
         logger.info("Initializing threads")
+
         thread_name = f"{self.name}::CommandProcessor"
         self.command_processor = threading.Thread(
             name=thread_name,
@@ -150,6 +196,7 @@ class NexusVoiceClient(threading.Thread):
 
         self.running = True
 
+        assert self.command_processor is not None, "Command processor not initialized"
         self.command_processor.start()
 
         logger.info("Listening for audio")
@@ -232,7 +279,7 @@ class NexusVoiceClient(threading.Thread):
         return audio_int16.numpy().tobytes()
         
     def _process_command_process_audio(self, command):
-        if hasattr(self, "save_recordings") and self.save_recordings:
+        if getattr(self, 'save_recordings', False):
             # Create the recordings directory if it doesn't exist
             Path("recordings").mkdir(parents=True, exist_ok=True)
 
@@ -243,8 +290,8 @@ class NexusVoiceClient(threading.Thread):
         # Convert audio bytes into numpy array
         np_audio = np.frombuffer(command.audio_bytes, dtype=NUMPY_AUDIO_FORMAT)
 
-        transcription = self._whisper_engine.infer(np_audio, AUDIO_SAMPLE_RATE)
-
+        # First use Whisper for STT
+        transcription = self.whisper_engine.infer(np_audio, AUDIO_SAMPLE_RATE)
         transcription = transcription.strip()
 
         logger.info(f"Transcription: {transcription}")
@@ -257,17 +304,18 @@ class NexusVoiceClient(threading.Thread):
         self._do_text_inference(text)
 
     def _do_text_inference(self, text):
-        # replace raw input with MCP-formatted user message
-        user_msg = UserMessage(text=text)
-        response = self.get_api().mcp_agent_inference(agent_id="main", mcp_input=user_msg)
+        # Use PydanticAgent for conversation/reasoning
+        response: ModelResponse = self.get_api().mcp_agent_inference(self.client_id, UserMessage(text=text))
 
         logger.info(f"Response: {response.text}")
         
-        audio_tensor = self._tts_engine.infer(response.text, voice=self.config.tts.voice)
+        # Use TTS engine to speak the response
+        audio_tensor = self.tts_engine.infer(response.text, voice=self.config.tts.voice)
 
         # Convert the audio tensor to numpy array
         audio = self._tensor_to_int16(self._resample_audio(audio_tensor))
-
+        
+        # Play the response
         self.audio_device.play(audio)
 
     def _process_vad(self):
@@ -326,7 +374,7 @@ class NexusVoiceClient(threading.Thread):
             # oww expects numpy array
             np_audio = np.frombuffer(audio_frames, dtype=NUMPY_AUDIO_FORMAT)
 
-            detection = self.wake_word_model.predict(np_audio)
+            detection: dict[str, float] = self.wake_word_model.predict(np_audio) # type: ignore
 
             if any(value > ACTIVATION_THRESHOLD for value in detection.values()):
                 detected_wake_words = [key for key, value in detection.items() if value > ACTIVATION_THRESHOLD]
@@ -345,9 +393,9 @@ class NexusVoiceClient(threading.Thread):
         # Convert audio bytes into numpy array
         np_audio = np.frombuffer(command.audio_bytes, dtype=NUMPY_AUDIO_FORMAT)
 
-        transcription = self._whisper_engine.infer(np_audio, AUDIO_SAMPLE_RATE)
+        transcription = self.whisper_engine.infer(np_audio, AUDIO_SAMPLE_RATE)
 
-        if hasattr(self, "save_recordings") and self.save_recordings:
+        if getattr(self, 'save_recordings', False):
             # Create the recordings directory if it doesn't exist
             Path("recordings").mkdir(parents=True, exist_ok=True)
             
@@ -360,7 +408,7 @@ class NexusVoiceClient(threading.Thread):
 
         logger.debug(f"Transcription: {transcription}")
 
-        model_conf = omegaconf.OmegaConf.select(self.config, "wake_word.models")
+        model_conf = self.config.get("wake_word.models")
         if model_conf is None:
             logger.error("No wake word models found in config")
             raise RuntimeError("No wake word models found in config")
@@ -438,7 +486,7 @@ class NexusVoiceClient(threading.Thread):
         pass
 
     class CommandWakeWord(Command):
-        def __init__(self, wake_word, audio_bytes = None):
+        def __init__(self, wake_word, audio_bytes: bytes):
             self.wake_word = wake_word
             self.audio_bytes = audio_bytes
 
@@ -451,15 +499,20 @@ class NexusVoiceClient(threading.Thread):
             self.text = text
 
 class NexusVoiceStandalone(NexusVoiceClient):
-    def __init__(self, client_id: str, config: omegaconf.DictConfig):
+    def __init__(self, client_id: str, config: NexusConfig):
         super().__init__(client_id, config)
         self._api = NexusAPILocal(config)
 
-    def _get_thread_name(self, client_id: str = None):
+    def _get_thread_name(self, client_id: str = ""):
         return f"NexusVoiceStandalone::{client_id}"
-    
-    def run(self):
-        super().run()
+
+class NexusVoiceOnline(NexusVoiceClient):
+    def __init__(self, client_id: str, config: NexusConfig):
+        super().__init__(client_id, config)
+        self._api = NexusAPIOnline(config)
+
+    def _get_thread_name(self, client_id: str = ""):
+        return f"NexusVoiceOnline::{client_id}"
 
 class RecordingState:
     STOPPED = 0
@@ -473,11 +526,11 @@ class RecordingState:
     def is_recording(self):
         with self._lock:
             return self.state != RecordingState.STOPPED
-        
+
     def is_confirmed(self):
         with self._lock:
             return self.state == RecordingState.RECORDING
-        
+
     def start(self):
         with self._lock:
             self.state = RecordingState.PENDING
@@ -491,4 +544,5 @@ class RecordingState:
             self.state = RecordingState.RECORDING
 
     def __str__(self):
-        return self.state.name
+        labels = {RecordingState.STOPPED: "STOPPED", RecordingState.RECORDING: "RECORDING", RecordingState.PENDING: "PENDING"}
+        return labels[self.state]

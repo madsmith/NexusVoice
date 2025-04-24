@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "accelerate==1.6.0",
+    "datasets==3.5.0",
     "numpy~=2.2",
     "openwakeword==0.6.0",
     "kokoro>=0.9.4",
@@ -14,6 +15,7 @@ dependencies = [
     "omegaconf>=2.3",
     "pydub~=0.25",
     "pydantic>=2.11.2",
+    "pydantic-ai>=0.0.55",
     "requests>=2.32.3",
     "setuptools",
     "silero==0.4.1",
@@ -27,11 +29,14 @@ dependencies = [
 [project.scripts]
 nexus-client = "nexusvoice.client.main:main"
 nexus-standalone = "nexusvoice.client.standalone:main"
+nexus-online = "nexusvoice.client.online:main"
 nexus-server = "nexusvoice.server.main:main"
 
 [project.optional-dependencies]
 dev = [
-    "matplotlib>=3.10"
+    "matplotlib>=3.10",
+    "scikit-learn>=1.4.0",
+    "pytest>=8.3.0"
 ]
 
 [build-system]

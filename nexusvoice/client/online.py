@@ -4,7 +4,7 @@ from omegaconf import OmegaConf
 from nexusvoice.utils.logging import get_logger
 logger = get_logger(__name__)
 
-from nexusvoice.client import NexusVoiceStandalone, NexusVoiceClient
+from nexusvoice.client.NexusClient import NexusVoiceClient, NexusVoiceOnline
 from nexusvoice.core.config import load_config
 
 def main():
@@ -20,10 +20,10 @@ def main():
         config = load_config()
  
         logger.debug("Creating NexusVoiceClient")
-        client = NexusVoiceStandalone("test", config)
+        client = NexusVoiceOnline("test", config)
         client.start()
 
-        client.add_command(NexusVoiceClient.CommandProcessText("Hey Nexus!"))
+        client.add_command(NexusVoiceClient.CommandProcessText("Hey Jarvis, turn on the kitchen lights"))
 
         client.join()
     except KeyboardInterrupt:

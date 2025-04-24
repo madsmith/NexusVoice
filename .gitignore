@@ -11,10 +11,12 @@ dist/
 config.yml
 
 # Runtime artifacts
+__pycache__
 *.pyc
 latest_silero_models.yml
 
 .DS_Store
+pyrightconfig.json
 response.mp3
 
 model.js
@@ -27,3 +29,6 @@ recordings/*.mp3
 recordings/*.wav
 test_cleaned_lms.wav
 samples/delay*.wav
+
+# Ignore build intermediaries
+build
