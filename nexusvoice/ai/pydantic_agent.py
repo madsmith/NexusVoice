@@ -49,9 +49,9 @@ class ConversationResponse(BaseModel):
 
 BaseAgentRunResultType = TypeVar('BaseAgentRunResultType')
 AgentDepsT = TypeVar('AgentDepsT')
-P = ParamSpec("P")
+ToolParamSpec = ParamSpec("ToolParamSpec")
 
-class BaseAgent(ABC, Generic[BaseAgentRunResultType, P]):
+class BaseAgent(ABC, Generic[BaseAgentRunResultType, ToolParamSpec]):
     def __init__(self, support_deps: NexusSupportDependencies):
         self._deps = support_deps
         self._config = support_deps.config
@@ -69,11 +69,11 @@ class BaseAgent(ABC, Generic[BaseAgentRunResultType, P]):
         pass
 
     @abstractmethod
-    def register_tool(self, tool_fn: ToolFuncContext[NexusSupportDependencies, P]):
+    def register_tool(self, tool_fn: ToolFuncContext[NexusSupportDependencies, ToolParamSpec]):
         pass
 
 
-class LocalClassifierAgent(BaseAgent[RequestType, P]):
+class LocalClassifierAgent(BaseAgent[RequestType, ToolParamSpec]):
     """Local classifier using a fine-tuned DistilBERT model"""
     
     def __init__(self, support_deps: NexusSupportDependencies):
@@ -150,10 +150,10 @@ class LocalClassifierAgent(BaseAgent[RequestType, P]):
         )
         return ModelResponse(parts=[response_part])
 
-    def register_tool(self, tool_fn: ToolFuncContext[NexusSupportDependencies, P]):
+    def register_tool(self, tool_fn: ToolFuncContext[NexusSupportDependencies, ToolParamSpec]):
         pass
 
-class FastClassifierAgent(BaseAgent[RequestType, P]):
+class FastClassifierAgent(BaseAgent[RequestType, ToolParamSpec]):
     """Fast OpenAI classifier using a smaller, cheaper model"""
     
     def __init__(self, support_deps: NexusSupportDependencies):
@@ -186,10 +186,10 @@ class FastClassifierAgent(BaseAgent[RequestType, P]):
         )
         return self._config.get("agent.classifier.fast.system_prompt", default_prompt)
 
-    def register_tool(self, tool_fn: ToolFuncContext[NexusSupportDependencies, P]):
+    def register_tool(self, tool_fn: ToolFuncContext[NexusSupportDependencies, ToolParamSpec]):
         self._agent.tool(tool_fn)
 
-class HomeAutomationAgent(BaseAgent[HomeAutomationResponse, P]):
+class HomeAutomationAgent(BaseAgent[HomeAutomationResponse, ToolParamSpec]):
     """Agent for home automation using pydantic_ai"""
     
     def __init__(self, support_deps: NexusSupportDependencies):
@@ -220,10 +220,10 @@ class HomeAutomationAgent(BaseAgent[HomeAutomationResponse, P]):
         )
         return self._config.get("agent.home_automation.system_prompt", default_prompt)
 
-    def register_tool(self, tool_fn: ToolFuncContext[NexusSupportDependencies, P]):
+    def register_tool(self, tool_fn: ToolFuncContext[NexusSupportDependencies, ToolParamSpec]):
         self._agent.tool(tool_fn)
 
-class ConversationalAgent(BaseAgent[ConversationResponse, P]):
+class ConversationalAgent(BaseAgent[ConversationResponse, ToolParamSpec]):
     """Agent for general conversation using pydantic_ai"""
     
     def __init__(self, support_deps: NexusSupportDependencies):
@@ -252,7 +252,7 @@ class ConversationalAgent(BaseAgent[ConversationResponse, P]):
         )
         return self._config.get("agent.conversational.system_prompt", default_prompt)
 
-    def register_tool(self, tool_fn: ToolFuncContext[NexusSupportDependencies, P]):
+    def register_tool(self, tool_fn: ToolFuncContext[NexusSupportDependencies, ToolParamSpec]):
         self._agent.tool(tool_fn)
 
 class PydanticAgent:
