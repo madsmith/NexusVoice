@@ -1,7 +1,16 @@
 import asyncio
+from pydantic_ai import RunContext
 from pydantic_ai.agent import AgentRunResult
 import pytest
-from nexusvoice.ai.pydantic_agent import HomeAutomationAction, HomeAutomationAgent, LocalClassifierAgent, FastClassifierAgent, RequestType, process_request
+from nexusvoice.ai.pydantic_agent import (
+    HomeAutomationAgent,
+    HomeAutomationResponse,
+    LocalClassifierAgent,
+    FastClassifierAgent,
+    NexusSupportDependencies,
+    PydanticAgent,
+    RequestType
+)
 
 from nexusvoice.core.config import load_config
 from nexusvoice.utils.debug import TimeThis
@@ -9,7 +18,8 @@ from nexusvoice.utils.debug import TimeThis
 def test_local_classifier():
     with TimeThis("LocalClassifierAgent"):
         config = load_config()
-        agent = LocalClassifierAgent(config)
+        support_deps = NexusSupportDependencies(config=config)
+        agent = LocalClassifierAgent(support_deps)
     
         # Test home automation request
         result = agent.run_sync("Turn on the living room lights")
@@ -34,7 +44,8 @@ def test_local_classifier():
 def test_fast_classifier():
     with TimeThis("FastClassifierAgent"):
         config = load_config()
-        agent = FastClassifierAgent(config)
+        support_deps = NexusSupportDependencies(config=config)
+        agent = FastClassifierAgent(support_deps)
     
         # Test home automation request
         result = agent.run_sync("Turn on the living room lights")
@@ -57,27 +68,39 @@ def test_fast_classifier():
         assert classification.confidence > 0.5
 
 def test_home_automation():
+    def home_control(ctx: RunContext[NexusSupportDependencies], intent: str, device: str, room: str) -> str:
+        """
+        Turn on, off, raise, or lower a home automation device.
+        
+        Args:
+            ctx: The run context
+            intent: The action to perform (e.g., turn_on, turn_off, raise, lower)
+            device: The device to control (e.g., light, fan, shade)
+            room: The room where the device is located
+        """
+        print(f"Home Automation: {intent} {device} in {room}")
+        return "Done"
+        
     with TimeThis("HomeAutomationAgent"):
         config = load_config()
-        agent = HomeAutomationAgent(config)
+        support_deps = NexusSupportDependencies(config=config)
+        agent = HomeAutomationAgent(support_deps)
+        agent.register_tool(home_control)
         
         # Test home automation request
         result = agent.run_sync("Turn on the living room lights")
 
         assert isinstance(result, AgentRunResult)
-        assert isinstance(result.data, HomeAutomationAction)
+        assert isinstance(result.data, HomeAutomationResponse)
 
-        action = result.data
-        assert action.intent == "turn_on"
-        assert action.device == "light"
-        assert action.room == "living room"
 
-def test_process_request():
+def test_pydantic_agent_process_request():
     with TimeThis("process_request"):
         config = load_config()
-        return
-        response = process_request(config, "Turn on the living room lights")
-        print(response)
+        agent = PydanticAgent(config, "test_client_id")
+        agent.start()
+        response = agent.process_request("Turn on the living room lights")
+        assert False, "Not Implemented"
 
 # Fix for pydantic_ai using get_event_loop() in synchronous functions 
 try:

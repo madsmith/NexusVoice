@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import List
 from nexusvoice.core.api import NexusAPI
 from nexusvoice.core.config import NexusConfig
@@ -11,10 +12,12 @@ from nexusvoice.protocol import mcp
 
 logger = get_logger(__name__)
 
-from nexusvoice.ai.pydantic_agent import PydanticAgent
+from nexusvoice.ai.pydantic_agent import NexusSupportDependencies, PydanticAgent
 from nexusvoice.core.api.tool_registry import tool_registry
 
-def home_control(ctx: RunContext, intent: str, device: str, room: str) -> str:
+from nexusvoice.tools.weather import get_weather_tool
+
+def home_control(ctx: RunContext[NexusSupportDependencies], intent: str, device: str, room: str) -> str:
     """
     Turn on, off, raise, or lower a home automation device.
     
@@ -26,7 +29,7 @@ def home_control(ctx: RunContext, intent: str, device: str, room: str) -> str:
     """
     print(f"Home Automation: {intent} {device} in {room}")
     return "Done"
-
+    
 class NexusAPIOnline(NexusAPI):
     def __init__(self, config: NexusConfig):
         super().__init__()
@@ -34,7 +37,11 @@ class NexusAPIOnline(NexusAPI):
         # TODO: Refactor client ID 
         self.agent = PydanticAgent(config, "TO BE DETERMINED CLIENT ID")
         self.agent.start()
-        self.agent.home_agent._agent.tool(home_control)
+        self.register_tools()
+
+    def register_tools(self):
+        self.agent.home_agent.register_tool(home_control)
+        self.agent.conversational_agent.register_tool(get_weather_tool)
 
     def agent_inference(self, agent_id: str, inputs) -> str:
         response = self.agent.process_request(inputs)

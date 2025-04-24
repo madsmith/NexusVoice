@@ -1,4 +1,7 @@
-from typing import Any, Optional, List, Literal, Dict, Union, Awaitable, Callable
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from typing import Any, Generic, Optional, List, Literal, Dict, TypeVar, Union, Awaitable, Callable, cast
+from typing_extensions import Concatenate, ParamSpec
 from nexusvoice.core.config import NexusConfig
 from pydantic.types import _JSON_TYPES
 from pydantic_ai.models.openai import OpenAIModel
@@ -7,7 +10,7 @@ from torch.nn import parameter
 from transformers import AutoConfig
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
-from pydantic_ai.agent import AgentRunResult
+from pydantic_ai.agent import AgentRunResult, ToolFuncContext, RunContext, ToolParams
 from pydantic_ai.models.function import FunctionModel, AgentInfo
 from pydantic_ai.messages import ModelMessage, TextPart, ModelResponsePart, ToolCallPart, ToolReturnPart, UserPromptPart
 import torch
@@ -24,6 +27,9 @@ ROOT_DIR = Path(__file__).parent.parent.parent
 MODEL_DIR = ROOT_DIR / "nexusvoice" / "models"
 
 
+@dataclass
+class NexusSupportDependencies:
+    config: NexusConfig
 
 class RequestType(BaseModel):
     """The type of request being made"""
@@ -43,13 +49,39 @@ class ConversationResponse(BaseModel):
     """Response from the conversational agent"""
     text: str = Field(..., description="The response text")
 
-class LocalClassifierAgent:
+BaseAgentRunResultType = TypeVar('BaseAgentRunResultType')
+AgentDepsT = TypeVar('AgentDepsT')
+P = ParamSpec("P")
+
+class BaseAgent(ABC, Generic[BaseAgentRunResultType, P]):
+    def __init__(self, support_deps: NexusSupportDependencies):
+        self._deps = support_deps
+        self._config = support_deps.config
+
+    @property
+    def config(self) -> NexusConfig:
+        return self._config
+
+    @property
+    def deps(self) -> NexusSupportDependencies:
+        return self._deps
+    
+    @abstractmethod
+    def run_sync(self, prompt: str) -> AgentRunResult[BaseAgentRunResultType]:
+        pass
+
+    @abstractmethod
+    def register_tool(self, tool_fn: ToolFuncContext[NexusSupportDependencies, P]):
+        pass
+
+
+class LocalClassifierAgent(BaseAgent[RequestType, P]):
     """Local classifier using a fine-tuned DistilBERT model"""
     
-    def __init__(self, config: NexusConfig):
-        self._config = config
+    def __init__(self, support_deps: NexusSupportDependencies):
+        super().__init__(support_deps)
 
-        model_name = config.get("agents.classifier.model")
+        model_name = self.config.get("agents.classifier.model")
         model_path = MODEL_DIR / model_name
         if not model_path.exists():
             logger.warning(f"Fine-tuned model not found at {model_path}. Please run train_classifier.py first.")
@@ -67,14 +99,15 @@ class LocalClassifierAgent:
         self._model_config = AutoConfig.from_pretrained(model_path)
         
         # Create the agent with our function model
-        self._agent = Agent[None, RequestType](
+        self._agent = Agent[NexusSupportDependencies, RequestType](
             FunctionModel(function=self._classifer, model_name="local-classifier"),
             system_prompt="",  # Not used for function model
+            deps_type=NexusSupportDependencies,
             result_type=RequestType
         )
     
     def run_sync(self, prompt: str) -> AgentRunResult[RequestType]:
-        return self._agent.run_sync(user_prompt=prompt)
+        return self._agent.run_sync(user_prompt=prompt, deps=self.deps)
 
     def _classifer(self, messages: List[ModelMessage], agent_info: AgentInfo) -> ModelResponse:
         # Select the proper tool, this expects a tool for RequestType
@@ -119,27 +152,31 @@ class LocalClassifierAgent:
         )
         return ModelResponse(parts=[response_part])
 
-class FastClassifierAgent:
+    def register_tool(self, tool_fn: ToolFuncContext[NexusSupportDependencies, P]):
+        pass
+
+class FastClassifierAgent(BaseAgent[RequestType, P]):
     """Fast OpenAI classifier using a smaller, cheaper model"""
     
-    def __init__(self, config: NexusConfig):
-        self._config = config
+    def __init__(self, support_deps: NexusSupportDependencies):
+        super().__init__(support_deps)
 
-        provider = OpenAIProvider(api_key=config.get("openai.api_key", ""))
+        provider = OpenAIProvider(api_key=self.config.get("openai.api_key", ""))
         model = OpenAIModel(
-            model_name=config.get("agent.classifier.fast.model", "gpt-3.5-turbo"),
+            model_name=self.config.get("agent.classifier.fast.model", "gpt-3.5-turbo"),
             provider=provider
         )
 
-        self._agent = Agent[None, RequestType](
+        self._agent = Agent[NexusSupportDependencies, RequestType](
             model,
             system_prompt=self._get_system_prompt(),
+            deps_type=NexusSupportDependencies,
             result_type=RequestType,
             result_tool_name='final_result'
         )
     
     def run_sync(self, prompt: str) -> AgentRunResult[RequestType]:
-        return self._agent.run_sync(user_prompt=prompt)
+        return self._agent.run_sync(user_prompt=prompt, deps=self.deps)
 
     def _get_system_prompt(self) -> str:
         default_prompt = (
@@ -151,26 +188,30 @@ class FastClassifierAgent:
         )
         return self._config.get("agent.classifier.fast.system_prompt", default_prompt)
 
-class HomeAutomationAgent:
+    def register_tool(self, tool_fn: ToolFuncContext[NexusSupportDependencies, P]):
+        self._agent.tool(tool_fn)
+
+class HomeAutomationAgent(BaseAgent[HomeAutomationResponse, P]):
     """Agent for home automation using pydantic_ai"""
     
-    def __init__(self, config: NexusConfig):
-        self._config = config
+    def __init__(self, support_deps: NexusSupportDependencies):
+        super().__init__(support_deps)
 
-        provider = OpenAIProvider(api_key=config.get("openai.api_key", ""))
+        provider = OpenAIProvider(api_key=self.config.get("openai.api_key", ""))
         model = OpenAIModel(
-            model_name=config.get('agents.home_automation.model', 'gpt-4-turbo-preview'),
+            model_name=self.config.get('agents.home_automation.model', 'gpt-4-turbo-preview'),
             provider=provider
         )
 
-        self._agent = Agent[None, HomeAutomationResponse](
+        self._agent = Agent[NexusSupportDependencies, HomeAutomationResponse](
             model,
             system_prompt=self._get_system_prompt(),
+            deps_type=NexusSupportDependencies,
             result_type=HomeAutomationResponse
         )
     
     def run_sync(self, prompt: str) -> AgentRunResult[HomeAutomationResponse]:
-        return self._agent.run_sync(user_prompt=prompt)
+        return self._agent.run_sync(user_prompt=prompt, deps=self.deps)
 
     def _get_system_prompt(self) -> str:
         default_prompt = (
@@ -181,26 +222,30 @@ class HomeAutomationAgent:
         )
         return self._config.get("agent.home_automation.system_prompt", default_prompt)
 
-class ConversationalAgent:
+    def register_tool(self, tool_fn: ToolFuncContext[NexusSupportDependencies, P]):
+        self._agent.tool(tool_fn)
+
+class ConversationalAgent(BaseAgent[ConversationResponse, P]):
     """Agent for general conversation using pydantic_ai"""
     
-    def __init__(self, config: NexusConfig):
-        self._config = config
+    def __init__(self, support_deps: NexusSupportDependencies):
+        super().__init__(support_deps)
 
-        provider = OpenAIProvider(api_key=config.get("openai.api_key", ""))
+        provider = OpenAIProvider(api_key=self.config.get("openai.api_key", ""))
         model = OpenAIModel(
-            model_name=config.get("agents.conversational.model", "gpt-4-turbo-preview"),
+            model_name=self.config.get("agents.conversational.model", "gpt-4-turbo-preview"),
             provider=provider
         )
 
-        self._agent = Agent[None, ConversationResponse](
+        self._agent = Agent[NexusSupportDependencies, ConversationResponse](
             model,
             system_prompt=self._get_system_prompt(),
+            deps_type=NexusSupportDependencies,
             result_type=ConversationResponse
         )
     
     def run_sync(self, prompt: str) -> AgentRunResult[ConversationResponse]:
-        return self._agent.run_sync(user_prompt=prompt)
+        return self._agent.run_sync(user_prompt=prompt, deps=self.deps)
     
     def _get_system_prompt(self) -> str:
         default_prompt = (
@@ -209,67 +254,8 @@ class ConversationalAgent:
         )
         return self._config.get("agent.conversational.system_prompt", default_prompt)
 
-def process_request(config: NexusConfig, text: str) -> ModelResponse:
-    """Process a request and return a ModelResponse"""
-    
-    # First use the classifier to determine request type
-    # Try local classifier first
-    try:
-        classifier = LocalClassifierAgent(config)
-        result = classifier.run_sync(text)
-        
-        classification = result.data
-
-    except Exception as e:
-        logger.warning(f"Local classifier failed: {e}, defaulting to conversation")
-        # print stack trace
-        import traceback
-        traceback.print_exc()
-        classification = RequestType(
-            type="conversation",
-            confidence=0.0
-        )
-
-        # Save for later
-        # logger.warning(f"Local classifier failed: {e}, falling back to OpenAI classifier")
-        # classifier = FastClassifierAgent(config)
-        # result = classifier.run_sync(text)
-        # classification = result.data
-    
-    logger.debug(f"Request classified as {classification.type} with confidence {classification.confidence}")
-    
-    # If confident it's a home automation request, use the home automation agent
-    if classification.type == "home_automation" and classification.confidence > 0.7:
-        home_agent = HomeAutomationAgent(config)
-        try:
-            result = home_agent.run_sync(text)
-            if isinstance(result.data, HomeAutomationAction):
-                tool_calls: List[ModelResponsePart] = [ToolCallPart(
-                    tool_name="home_control",
-                    args=result.data.model_dump()
-                )]
-                return ModelResponse(parts=tool_calls)
-        except Exception as e:
-            logger.debug(f"Home automation processing failed: {e}")
-    
-    # Fall back to conversational response
-    conv_agent = ConversationalAgent(config)
-    result = conv_agent.run_sync(text)
-    return ModelResponse(parts=[TextPart(content=result.data.text)])
-
-def process_tool_response(config, tool_results: List[ToolReturnPart]) -> ModelResponse:
-    """Process tool responses and generate a follow-up response"""
-    
-    # Combine tool responses into a single message
-    tool_message = "\n".join([f"Tool '{r.tool_name}' returned: {r.content}" for r in tool_results])
-    
-    conv_agent = ConversationalAgent(config)
-    result = conv_agent.run_sync(
-        f"The following actions were performed:\n{tool_message}\n\nPlease provide a brief confirmation."
-    )
-    
-    return ModelResponse(parts=[TextPart(content=result.data.text)])
-
+    def register_tool(self, tool_fn: ToolFuncContext[NexusSupportDependencies, P]):
+        self._agent.tool(tool_fn)
 
 class PydanticAgent:
     def __init__(self, config: NexusConfig, client_id: str):
@@ -297,9 +283,11 @@ class PydanticAgent:
     
     def initialize_agents(self):
         logger.debug("Initializing agents...")
-        self._classifier_agent = LocalClassifierAgent(self.config)
-        self._home_agent = HomeAutomationAgent(self.config)
-        self._conversational_agent = ConversationalAgent(self.config)
+        support_deps = NexusSupportDependencies(config=self.config)
+
+        self._classifier_agent = LocalClassifierAgent(support_deps)
+        self._home_agent = HomeAutomationAgent(support_deps)
+        self._conversational_agent = ConversationalAgent(support_deps)
     
     def initialize(self):
         self.initialize_agents()

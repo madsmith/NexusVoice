@@ -26,7 +26,8 @@ def main():
         client = NexusVoiceOnline("test", config)
         client.start()
 
-        client.add_command(NexusVoiceClient.CommandProcessText("Hey Jarvis, turn on the kitchen lights"))
+        # client.add_command(NexusVoiceClient.CommandProcessText("Hey Jarvis, turn on the kitchen lights"))
+        client.add_command(NexusVoiceClient.CommandProcessText("Hey Jarvis, what's the weather in Wildwood, MO?"))
 
         client.join()
     except KeyboardInterrupt:

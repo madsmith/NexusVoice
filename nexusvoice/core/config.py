@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import Any
 from omegaconf import OmegaConf, DictConfig, ListConfig
 
@@ -10,7 +11,6 @@ class NexusConfig:
 
     def __getattr__(self, name: str) -> Any:
         return self.get(name)
-
 
 def load_config() -> NexusConfig:
     config = OmegaConf.load("config.yml")
