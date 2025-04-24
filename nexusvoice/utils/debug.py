@@ -1,5 +1,7 @@
+import logging
 import sys
 import time
+from typing import Union
 
 # Callback function for when error is called
 _error_callback = None
@@ -126,3 +128,12 @@ def dump_performance_logs():
         sum_time = sum(times)
         avg_time = sum_time / count
         log(LogLevel.DEBUG, f"    {func:<40} | {count:<6} calls | total {fmt_time(sum_time)} | avg {fmt_time(avg_time)}")
+
+def reset_logging(loggers: Union[list[str],str,None], level: int = logging.WARNING):
+    if loggers is None:
+        return
+    if isinstance(loggers, str):
+        loggers = [loggers]
+    for logger_name in loggers:
+        logging.getLogger(logger_name).setLevel(level)
+    
