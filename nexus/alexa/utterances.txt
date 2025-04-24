@@ -1,0 +1,287 @@
+SetLightControl set {RoomName} to {LightLevelDirection}
+SetLightControl set {RoomName} at {LightLevelDirection}
+SetLightControl set {RoomName} {LightName} to {LightLevelDirection}
+SetLightControl set {RoomName} {LightName} at {LightLevelDirection}
+SetLightControl set {FloorName} {RoomName} to {LightLevelDirection}
+SetLightControl set {FloorName} {RoomName} at {LightLevelDirection}
+SetLightControl set {FloorName} {RoomName} {LightName} to {LightLevelDirection}
+SetLightControl set {FloorName} {RoomName} {LightName} at {LightLevelDirection}
+SetLightControl set the {RoomName} to {LightLevelDirection}
+SetLightControl set the {RoomName} at {LightLevelDirection}
+SetLightControl set the {RoomName} {LightName} to {LightLevelDirection}
+SetLightControl set the {RoomName} {LightName} at {LightLevelDirection}
+SetLightControl set the {FloorName} {RoomName} to {LightLevelDirection}
+SetLightControl set the {FloorName} {RoomName} at {LightLevelDirection}
+SetLightControl set the {FloorName} {RoomName} {LightName} to {LightLevelDirection}
+SetLightControl set the {FloorName} {RoomName} {LightName} at {LightLevelDirection}
+SetLightControl turn {RoomName} to {LightLevelDirection}
+SetLightControl turn {RoomName} {LightName} to {LightLevelDirection}
+SetLightControl turn {FloorName} {RoomName} to {LightLevelDirection}
+SetLightControl turn {FloorName} {RoomName} {LightName} to {LightLevelDirection}
+SetLightControl turn the {RoomName} to {LightLevelDirection}
+SetLightControl turn the {RoomName} {LightName} to {LightLevelDirection}
+SetLightControl turn the {FloorName} {RoomName} to {LightLevelDirection}
+SetLightControl turn the {FloorName} {RoomName} {LightName} to {LightLevelDirection}
+SetLightControl turn {LightDirection} {LightName}
+SetLightControl turn {LightDirection} {FloorName} {LightName}
+SetLightControl turn {LightDirection} the {LightName}
+SetLightControl turn {LightDirection} the {FloorName} {LightName}
+SetLightControl turn {LightDirection} {RoomName}
+SetLightControl turn {LightDirection} {RoomName} {LightName}
+SetLightControl turn {LightDirection} {FloorName} {RoomName}
+SetLightControl turn {LightDirection} {FloorName} {RoomName} {LightName}
+SetLightControl turn {LightDirection} the {RoomName}
+SetLightControl turn {LightDirection} the {RoomName} {LightName}
+SetLightControl turn {LightDirection} the {FloorName} {RoomName}
+SetLightControl turn {LightDirection} the {FloorName} {RoomName} {LightName}
+SetLightControl turn {LightDirection} light in the {RoomName}
+SetLightControl turn {LightDirection} light in the {FloorName} {RoomName}
+SetLightControl turn {LightDirection} light on the {RoomName}
+SetLightControl turn {LightDirection} light on the {FloorName} {RoomName}
+SetLightControl turn {LightDirection} lights in the {RoomName}
+SetLightControl turn {LightDirection} lights in the {FloorName} {RoomName}
+SetLightControl turn {LightDirection} lights on the {RoomName}
+SetLightControl turn {LightDirection} lights on the {FloorName} {RoomName}
+SetLightControl turn {LightDirection} the light in the {RoomName}
+SetLightControl turn {LightDirection} the light in the {FloorName} {RoomName}
+SetLightControl turn {LightDirection} the light on the {RoomName}
+SetLightControl turn {LightDirection} the light on the {FloorName} {RoomName}
+SetLightControl turn {LightDirection} the lights in the {RoomName}
+SetLightControl turn {LightDirection} the lights in the {FloorName} {RoomName}
+SetLightControl turn {LightDirection} the lights on the {RoomName}
+SetLightControl turn {LightDirection} the lights on the {FloorName} {RoomName}
+SetLightControl {RoomName} {LightName} {LightLevelDirection}
+SetLightControl {FloorName} {RoomName} {LightName} {LightLevelDirection}
+SetLightControl {FloorName} {LightName}
+SetFloorLightControl turn all light in the {FloorName} to {LightLevelDirection}
+SetFloorLightControl turn all light in the {FloorName} at {LightLevelDirection}
+SetFloorLightControl turn all light on the {FloorName} to {LightLevelDirection}
+SetFloorLightControl turn all light on the {FloorName} at {LightLevelDirection}
+SetFloorLightControl turn all lights in the {FloorName} to {LightLevelDirection}
+SetFloorLightControl turn all lights in the {FloorName} at {LightLevelDirection}
+SetFloorLightControl turn all lights on the {FloorName} to {LightLevelDirection}
+SetFloorLightControl turn all lights on the {FloorName} at {LightLevelDirection}
+SetFloorLightControl turn all the light in the {FloorName} to {LightLevelDirection}
+SetFloorLightControl turn all the light in the {FloorName} at {LightLevelDirection}
+SetFloorLightControl turn all the light on the {FloorName} to {LightLevelDirection}
+SetFloorLightControl turn all the light on the {FloorName} at {LightLevelDirection}
+SetFloorLightControl turn all the lights in the {FloorName} to {LightLevelDirection}
+SetFloorLightControl turn all the lights in the {FloorName} at {LightLevelDirection}
+SetFloorLightControl turn all the lights on the {FloorName} to {LightLevelDirection}
+SetFloorLightControl turn all the lights on the {FloorName} at {LightLevelDirection}
+SetFloorLightControl set all light in the {FloorName} to {LightLevelDirection}
+SetFloorLightControl set all light in the {FloorName} at {LightLevelDirection}
+SetFloorLightControl set all light on the {FloorName} to {LightLevelDirection}
+SetFloorLightControl set all light on the {FloorName} at {LightLevelDirection}
+SetFloorLightControl set all lights in the {FloorName} to {LightLevelDirection}
+SetFloorLightControl set all lights in the {FloorName} at {LightLevelDirection}
+SetFloorLightControl set all lights on the {FloorName} to {LightLevelDirection}
+SetFloorLightControl set all lights on the {FloorName} at {LightLevelDirection}
+SetFloorLightControl set all the light in the {FloorName} to {LightLevelDirection}
+SetFloorLightControl set all the light in the {FloorName} at {LightLevelDirection}
+SetFloorLightControl set all the light on the {FloorName} to {LightLevelDirection}
+SetFloorLightControl set all the light on the {FloorName} at {LightLevelDirection}
+SetFloorLightControl set all the lights in the {FloorName} to {LightLevelDirection}
+SetFloorLightControl set all the lights in the {FloorName} at {LightLevelDirection}
+SetFloorLightControl set all the lights on the {FloorName} to {LightLevelDirection}
+SetFloorLightControl set all the lights on the {FloorName} at {LightLevelDirection}
+SetFloorLightControl turn all light in the {FloorName} {LightDirection}
+SetFloorLightControl turn all light on the {FloorName} {LightDirection}
+SetFloorLightControl turn all lights in the {FloorName} {LightDirection}
+SetFloorLightControl turn all lights on the {FloorName} {LightDirection}
+SetFloorLightControl turn all the light in the {FloorName} {LightDirection}
+SetFloorLightControl turn all the light on the {FloorName} {LightDirection}
+SetFloorLightControl turn all the lights in the {FloorName} {LightDirection}
+SetFloorLightControl turn all the lights on the {FloorName} {LightDirection}
+SetFloorLightControl set all light in the {FloorName} {LightDirection}
+SetFloorLightControl set all light on the {FloorName} {LightDirection}
+SetFloorLightControl set all lights in the {FloorName} {LightDirection}
+SetFloorLightControl set all lights on the {FloorName} {LightDirection}
+SetFloorLightControl set all the light in the {FloorName} {LightDirection}
+SetFloorLightControl set all the light on the {FloorName} {LightDirection}
+SetFloorLightControl set all the lights in the {FloorName} {LightDirection}
+SetFloorLightControl set all the lights on the {FloorName} {LightDirection}
+SetFloorLightControl turn {LightDirection} all light in the {FloorName}
+SetFloorLightControl turn {LightDirection} all light on the {FloorName}
+SetFloorLightControl turn {LightDirection} all lights in the {FloorName}
+SetFloorLightControl turn {LightDirection} all lights on the {FloorName}
+SetFloorLightControl turn {LightDirection} all the light in the {FloorName}
+SetFloorLightControl turn {LightDirection} all the light on the {FloorName}
+SetFloorLightControl turn {LightDirection} all the lights in the {FloorName}
+SetFloorLightControl turn {LightDirection} all the lights on the {FloorName}
+SetFloorLightControl turn {LightDirection} all the {FloorName} light
+SetFloorLightControl turn {LightDirection} all the {FloorName} lights
+SetLightControlMulti turn {LightDirection} the lights in the {AreaNameOne} and {AreaNameFive}
+SetLightControlMulti turn {LightDirection} the lights in the {AreaNameOne} and the {AreaNameFive}
+SetLightControlMulti turn {LightDirection} the lights in the {AreaNameOne} {AreaNameTwo} and {AreaNameFive}
+SetLightControlMulti turn {LightDirection} the lights in the {AreaNameOne} {AreaNameTwo} and the {AreaNameFive}
+SetLightControlMulti turn {LightDirection} the lights in the {AreaNameOne} {AreaNameTwo} {AreaNameThree} and {AreaNameFive}
+SetLightControlMulti turn {LightDirection} the lights in the {AreaNameOne} {AreaNameTwo} {AreaNameThree} and the {AreaNameFive}
+SetLightControlMulti turn {LightDirection} the lights in the {AreaNameOne} {AreaNameTwo} {AreaNameThree} {AreaNameFour} and {AreaNameFive}
+SetLightControlMulti turn {LightDirection} the lights in the {AreaNameOne} {AreaNameTwo} {AreaNameThree} {AreaNameFour} and the {AreaNameFive}
+SetLightControlMulti turn {LightDirection} the lights in the {AreaNameOne} {AreaNameTwo} {AreaNameThree} the {AreaNameFour} and {AreaNameFive}
+SetLightControlMulti turn {LightDirection} the lights in the {AreaNameOne} {AreaNameTwo} {AreaNameThree} the {AreaNameFour} and the {AreaNameFive}
+SetLightControlMulti turn {LightDirection} the lights in the {AreaNameOne} {AreaNameTwo} the {AreaNameThree} and {AreaNameFive}
+SetLightControlMulti turn {LightDirection} the lights in the {AreaNameOne} {AreaNameTwo} the {AreaNameThree} and the {AreaNameFive}
+SetLightControlMulti turn {LightDirection} the lights in the {AreaNameOne} {AreaNameTwo} the {AreaNameThree} {AreaNameFour} and {AreaNameFive}
+SetLightControlMulti turn {LightDirection} the lights in the {AreaNameOne} {AreaNameTwo} the {AreaNameThree} {AreaNameFour} and the {AreaNameFive}
+SetLightControlMulti turn {LightDirection} the lights in the {AreaNameOne} {AreaNameTwo} the {AreaNameThree} the {AreaNameFour} and {AreaNameFive}
+SetLightControlMulti turn {LightDirection} the lights in the {AreaNameOne} {AreaNameTwo} the {AreaNameThree} the {AreaNameFour} and the {AreaNameFive}
+SetLightControlMulti turn {LightDirection} the lights in the {AreaNameOne} the {AreaNameTwo} and {AreaNameFive}
+SetLightControlMulti turn {LightDirection} the lights in the {AreaNameOne} the {AreaNameTwo} and the {AreaNameFive}
+SetLightControlMulti turn {LightDirection} the lights in the {AreaNameOne} the {AreaNameTwo} {AreaNameThree} and {AreaNameFive}
+SetLightControlMulti turn {LightDirection} the lights in the {AreaNameOne} the {AreaNameTwo} {AreaNameThree} and the {AreaNameFive}
+SetLightControlMulti turn {LightDirection} the lights in the {AreaNameOne} the {AreaNameTwo} {AreaNameThree} {AreaNameFour} and {AreaNameFive}
+SetLightControlMulti turn {LightDirection} the lights in the {AreaNameOne} the {AreaNameTwo} {AreaNameThree} {AreaNameFour} and the {AreaNameFive}
+SetLightControlMulti turn {LightDirection} the lights in the {AreaNameOne} the {AreaNameTwo} {AreaNameThree} the {AreaNameFour} and {AreaNameFive}
+SetLightControlMulti turn {LightDirection} the lights in the {AreaNameOne} the {AreaNameTwo} {AreaNameThree} the {AreaNameFour} and the {AreaNameFive}
+SetLightControlMulti turn {LightDirection} the lights in the {AreaNameOne} the {AreaNameTwo} the {AreaNameThree} and {AreaNameFive}
+SetLightControlMulti turn {LightDirection} the lights in the {AreaNameOne} the {AreaNameTwo} the {AreaNameThree} and the {AreaNameFive}
+SetLightControlMulti turn {LightDirection} the lights in the {AreaNameOne} the {AreaNameTwo} the {AreaNameThree} {AreaNameFour} and {AreaNameFive}
+SetLightControlMulti turn {LightDirection} the lights in the {AreaNameOne} the {AreaNameTwo} the {AreaNameThree} {AreaNameFour} and the {AreaNameFive}
+SetLightControlMulti turn {LightDirection} the lights in the {AreaNameOne} the {AreaNameTwo} the {AreaNameThree} the {AreaNameFour} and {AreaNameFive}
+SetLightControlMulti turn {LightDirection} the lights in the {AreaNameOne} the {AreaNameTwo} the {AreaNameThree} the {AreaNameFour} and the {AreaNameFive}
+ClarifyAreaScopeBoth all
+ClarifyAreaScopeBoth all of them
+ClarifyAreaScopeBoth both
+ClarifyAreaScopePosition the {Position} one
+SpecifyArea {RoomName}
+SpecifyArea {FloorName} {RoomName}
+SpecifyArea the {RoomName}
+SpecifyArea the {FloorName} {RoomName}
+SpecifyArea {FloorName}
+SpecifyArea the {FloorName}
+SpecifyArea on the {FloorName}
+SpecifyLevel {Level}
+SpecifyLevel set them to {Level}
+SpecifyShadeDirection {ShadeDirection}
+SpecifyShadeDirection shade {ShadeDirection}
+SpecifyShadeDirection shades {ShadeDirection}
+SpecifyShadeDirection {ShadeDirection} please
+SpecifyShadeDirection {ShadeDirection} them please
+SpecifyShadeDirection {ShadeDirection} the shade
+SpecifyShadeDirection {ShadeDirection} the shades
+SpecifyLightDirection {LightDirection}
+SpecifyLightDirection turn them {LightDirection}
+SpecifyLightDirection turn them to {LightDirection}
+SpecifyLightDirection {LightDirection} please
+SpecifyLightDirection light {LightDirection}
+SpecifyLightDirection lights {LightDirection}
+SetShadeControl {ShadeDirection} {RoomName}
+SetShadeControl {ShadeDirection} {RoomName} {ShadeName}
+SetShadeControl {ShadeDirection} {FloorName} {RoomName}
+SetShadeControl {ShadeDirection} {FloorName} {RoomName} {ShadeName}
+SetShadeControl {ShadeDirection} the {RoomName}
+SetShadeControl {ShadeDirection} the {RoomName} {ShadeName}
+SetShadeControl {ShadeDirection} the {FloorName} {RoomName}
+SetShadeControl {ShadeDirection} the {FloorName} {RoomName} {ShadeName}
+SetShadeControl {ShadeDirection} shade in {RoomName}
+SetShadeControl {ShadeDirection} shade in {FloorName} {RoomName}
+SetShadeControl {ShadeDirection} shade in the {RoomName}
+SetShadeControl {ShadeDirection} shade in the {FloorName} {RoomName}
+SetShadeControl {ShadeDirection} shade on {RoomName}
+SetShadeControl {ShadeDirection} shade on {FloorName} {RoomName}
+SetShadeControl {ShadeDirection} shade on the {RoomName}
+SetShadeControl {ShadeDirection} shade on the {FloorName} {RoomName}
+SetShadeControl {ShadeDirection} shades in {RoomName}
+SetShadeControl {ShadeDirection} shades in {FloorName} {RoomName}
+SetShadeControl {ShadeDirection} shades in the {RoomName}
+SetShadeControl {ShadeDirection} shades in the {FloorName} {RoomName}
+SetShadeControl {ShadeDirection} shades on {RoomName}
+SetShadeControl {ShadeDirection} shades on {FloorName} {RoomName}
+SetShadeControl {ShadeDirection} shades on the {RoomName}
+SetShadeControl {ShadeDirection} shades on the {FloorName} {RoomName}
+SetShadeControl {ShadeDirection} the shade in {RoomName}
+SetShadeControl {ShadeDirection} the shade in {FloorName} {RoomName}
+SetShadeControl {ShadeDirection} the shade in the {RoomName}
+SetShadeControl {ShadeDirection} the shade in the {FloorName} {RoomName}
+SetShadeControl {ShadeDirection} the shade on {RoomName}
+SetShadeControl {ShadeDirection} the shade on {FloorName} {RoomName}
+SetShadeControl {ShadeDirection} the shade on the {RoomName}
+SetShadeControl {ShadeDirection} the shade on the {FloorName} {RoomName}
+SetShadeControl {ShadeDirection} the shades in {RoomName}
+SetShadeControl {ShadeDirection} the shades in {FloorName} {RoomName}
+SetShadeControl {ShadeDirection} the shades in the {RoomName}
+SetShadeControl {ShadeDirection} the shades in the {FloorName} {RoomName}
+SetShadeControl {ShadeDirection} the shades on {RoomName}
+SetShadeControl {ShadeDirection} the shades on {FloorName} {RoomName}
+SetShadeControl {ShadeDirection} the shades on the {RoomName}
+SetShadeControl {ShadeDirection} the shades on the {FloorName} {RoomName}
+SetShadeControl set shade in the {RoomName} to {ShadeLevelDirection}
+SetShadeControl set shade in the {RoomName} at {ShadeLevelDirection}
+SetShadeControl set shade in the {FloorName} {RoomName} to {ShadeLevelDirection}
+SetShadeControl set shade in the {FloorName} {RoomName} at {ShadeLevelDirection}
+SetShadeControl set shade on the {RoomName} to {ShadeLevelDirection}
+SetShadeControl set shade on the {RoomName} at {ShadeLevelDirection}
+SetShadeControl set shade on the {FloorName} {RoomName} to {ShadeLevelDirection}
+SetShadeControl set shade on the {FloorName} {RoomName} at {ShadeLevelDirection}
+SetShadeControl set shades in the {RoomName} to {ShadeLevelDirection}
+SetShadeControl set shades in the {RoomName} at {ShadeLevelDirection}
+SetShadeControl set shades in the {FloorName} {RoomName} to {ShadeLevelDirection}
+SetShadeControl set shades in the {FloorName} {RoomName} at {ShadeLevelDirection}
+SetShadeControl set shades on the {RoomName} to {ShadeLevelDirection}
+SetShadeControl set shades on the {RoomName} at {ShadeLevelDirection}
+SetShadeControl set shades on the {FloorName} {RoomName} to {ShadeLevelDirection}
+SetShadeControl set shades on the {FloorName} {RoomName} at {ShadeLevelDirection}
+SetShadeControl set the shade in the {RoomName} to {ShadeLevelDirection}
+SetShadeControl set the shade in the {RoomName} at {ShadeLevelDirection}
+SetShadeControl set the shade in the {FloorName} {RoomName} to {ShadeLevelDirection}
+SetShadeControl set the shade in the {FloorName} {RoomName} at {ShadeLevelDirection}
+SetShadeControl set the shade on the {RoomName} to {ShadeLevelDirection}
+SetShadeControl set the shade on the {RoomName} at {ShadeLevelDirection}
+SetShadeControl set the shade on the {FloorName} {RoomName} to {ShadeLevelDirection}
+SetShadeControl set the shade on the {FloorName} {RoomName} at {ShadeLevelDirection}
+SetShadeControl set the shades in the {RoomName} to {ShadeLevelDirection}
+SetShadeControl set the shades in the {RoomName} at {ShadeLevelDirection}
+SetShadeControl set the shades in the {FloorName} {RoomName} to {ShadeLevelDirection}
+SetShadeControl set the shades in the {FloorName} {RoomName} at {ShadeLevelDirection}
+SetShadeControl set the shades on the {RoomName} to {ShadeLevelDirection}
+SetShadeControl set the shades on the {RoomName} at {ShadeLevelDirection}
+SetShadeControl set the shades on the {FloorName} {RoomName} to {ShadeLevelDirection}
+SetShadeControl set the shades on the {FloorName} {RoomName} at {ShadeLevelDirection}
+SetShadeControl set shade in the {FloorName} to {ShadeLevelDirection}
+SetShadeControl set shade in the {FloorName} at {ShadeLevelDirection}
+SetShadeControl set shade on the {FloorName} to {ShadeLevelDirection}
+SetShadeControl set shade on the {FloorName} at {ShadeLevelDirection}
+SetShadeControl set shades in the {FloorName} to {ShadeLevelDirection}
+SetShadeControl set shades in the {FloorName} at {ShadeLevelDirection}
+SetShadeControl set shades on the {FloorName} to {ShadeLevelDirection}
+SetShadeControl set shades on the {FloorName} at {ShadeLevelDirection}
+SetShadeControl set the shade in the {FloorName} to {ShadeLevelDirection}
+SetShadeControl set the shade in the {FloorName} at {ShadeLevelDirection}
+SetShadeControl set the shade on the {FloorName} to {ShadeLevelDirection}
+SetShadeControl set the shade on the {FloorName} at {ShadeLevelDirection}
+SetShadeControl set the shades in the {FloorName} to {ShadeLevelDirection}
+SetShadeControl set the shades in the {FloorName} at {ShadeLevelDirection}
+SetShadeControl set the shades on the {FloorName} to {ShadeLevelDirection}
+SetShadeControl set the shades on the {FloorName} at {ShadeLevelDirection}
+QueryLightAreas what  lights are on
+QueryLightAreas what  rooms are on
+QueryLightAreas what  areas are on
+QueryLightAreas are any  lights on
+QueryLightAreas are any  rooms on
+QueryLightAreas are any  areas on
+QueryLightLevel are the lights on in the  {RoomName}
+QueryLightLevel are the lights on in the  {FloorName} {RoomName}
+QueryLightLevel are the lights off in the  {RoomName}
+QueryLightLevel are the lights off in the  {FloorName} {RoomName}
+QueryLightLevel are the lights in the  {RoomName} on
+QueryLightLevel are the lights in the  {RoomName} off
+QueryLightLevel are the lights in the  {FloorName} {RoomName} on
+QueryLightLevel are the lights in the  {FloorName} {RoomName} off
+LocatePerson where is {PersonName}
+AMAZON.StopIntent stop
+AMAZON.StopIntent cancel
+AMAZON.StopIntent never mind
+AMAZON.StopIntent forget it
+AMAZON.StopIntent be quiet
+AMAZON.StopIntent shut up
+AMAZON.StopIntent I'm not talking to you
+AMAZON.StopIntent quit it
+AMAZON.StopIntent quit
+InvokeTest run test {TestID}
+InvokeTest invoke test {TestID}
+InvokeTest do test {TestID}
+SetDebugMode {ActivationVerb} debug mode
+Reload reload
+Reload reload config
