@@ -1,6 +1,5 @@
 from typing import Optional
 from nexusvoice.ai.pydantic_agent import ModelResponse, PydanticAgent
-import nexusvoice.bootstrap
 
 import queue
 import threading

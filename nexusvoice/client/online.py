@@ -1,4 +1,5 @@
 import logging
+import argparse
 from nexusvoice.utils.debug import reset_logging
 from omegaconf import OmegaConf
 
@@ -11,6 +12,10 @@ from nexusvoice.core.config import load_config
 def main():
     client = None
     try:
+        parser = argparse.ArgumentParser(description="NexusVoice Online Client")
+        parser.add_argument('-c', '--cmd', nargs=argparse.REMAINDER, help='Send a command prompt to the client')
+        args = parser.parse_args()
+
         log_format = "[{levelname}]\t{threadName}\t{name}\t{message}"
         log_level = logging.DEBUG
         handler = logging.StreamHandler()
@@ -26,8 +31,13 @@ def main():
         client = NexusVoiceOnline("test", config)
         client.start()
 
-        # client.add_command(NexusVoiceClient.CommandProcessText("Hey Jarvis, turn on the kitchen lights"))
-        client.add_command(NexusVoiceClient.CommandProcessText("Hey Jarvis, what's the weather in Wildwood, MO?"))
+        if args.cmd:
+            prompt = " ".join(args.cmd).strip()
+            if prompt:
+                client.add_command(NexusVoiceClient.CommandProcessText(prompt))
+        else:
+            client.add_command(NexusVoiceClient.CommandProcessText("Hey Jarvis, turn on the kitchen lights"))
+            # client.add_command(NexusVoiceClient.CommandProcessText("Hey Jarvis, what's the weather in Wildwood, MO?"))
 
         client.join()
     except KeyboardInterrupt:
