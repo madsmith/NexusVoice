@@ -129,3 +129,37 @@ def test_alternating_dict_list_set():
     # List -> Dict -> List
     cfg.set('toplist.0.innerdict.y.2', 12345)
     assert cfg.get('toplist.0.innerdict.y.2') == 12345
+
+def test_getattr_access_and_setattr():
+    cfg = NexusConfig(OmegaConf.create({'foo': 'bar'}))
+    # getattr
+    assert cfg.foo == 'bar'
+    # setattr
+    cfg.newattr = 123
+    assert cfg.get('newattr') == 123
+    # setattr overwrite
+    cfg.foo = 'baz'
+    assert cfg.foo == 'baz'
+
+def test_getattr_missing_returns_none():
+    cfg = NexusConfig(OmegaConf.create({'foo': 'bar'}))
+    assert cfg.not_a_key is None
+
+def test_str_and_repr():
+    cfg = NexusConfig(OmegaConf.create({'foo': 'bar', 'nested': {'x': 1}}))
+    # str section (should be passthrough)
+    s = str(cfg)
+    assert 'foo' in s
+    assert 'bar' in s
+    assert 'nested' in s
+    assert 'x' in s
+    assert '1' in s
+
+    # repr section (should be wrapped)
+    r = repr(cfg)
+    assert 'NexusConfig' in r
+    assert 'foo' in r
+    assert 'bar' in r
+    assert 'nested' in r
+    assert 'x' in r
+    assert '1' in r

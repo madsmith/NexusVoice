@@ -57,6 +57,20 @@ class NexusConfig:
     def __getattr__(self, name: str) -> Any:
         return self.get(name)
 
+    def __setattr__(self, name: str, value: Any) -> None:
+        properties = ["_config"]
+        if name in properties:
+            super().__setattr__(name, value)
+            return
+
+        self.set(name, value)
+
+    def __str__(self) -> str:
+        return str(self._config)
+
+    def __repr__(self) -> str:
+        return f"NexusConfig({repr(self._config)})"
+
 def load_config() -> NexusConfig:
     config = OmegaConf.load("config.yml")
     return NexusConfig(config)
