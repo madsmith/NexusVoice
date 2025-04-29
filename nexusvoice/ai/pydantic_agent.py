@@ -1,9 +1,11 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Generic, List, TypeVar
+from typing import Generic, List, Optional, TypeVar, Union
 from typing_extensions import ParamSpec
 from nexusvoice.core.config import NexusConfig
+from openai import AsyncOpenAI
 from pydantic_ai.models.openai import OpenAIModel
+from pydantic_ai.providers import Provider
 from pydantic_ai.providers.openai import OpenAIProvider
 from transformers import AutoConfig
 from pydantic import BaseModel, Field
@@ -39,9 +41,17 @@ class HomeAutomationAction(BaseModel):
     device: str = Field(..., description="The device to control (e.g., light, fan, shade)")
     room: str = Field(..., description="The room where the device is located")
 
-class HomeAutomationResponse(BaseModel):
+class HomeAutomationResponseStruct(BaseModel):
     """Response from the home automation agent"""
-    text: str = Field(..., description="The response text")
+    summary_message: str = Field(..., description="A short summary response indicating the success or failure status of the action completed.")
+
+    @staticmethod
+    def extract_message(response: "HomeAutomationResponse") -> str:
+        if isinstance(response, str):
+            return response
+        return response.summary_message
+
+HomeAutomationResponse = Union[HomeAutomationResponseStruct, str]
 
 class ConversationResponse(BaseModel):
     """Response from the conversational agent"""
@@ -192,10 +202,14 @@ class FastClassifierAgent(BaseAgent[RequestType, ToolParamSpec]):
 class HomeAutomationAgent(BaseAgent[HomeAutomationResponse, ToolParamSpec]):
     """Agent for home automation using pydantic_ai"""
     
-    def __init__(self, support_deps: NexusSupportDependencies):
+    def __init__(self, support_deps: NexusSupportDependencies, provider: Optional[Provider[AsyncOpenAI]] = None):
         super().__init__(support_deps)
 
-        provider = OpenAIProvider(api_key=self.config.get("openai.api_key", ""))
+    
+        provider = provider or OpenAIProvider(
+            api_key=self.config.get("openai.api_key", ""),
+            base_url=self.config.get("openai.base_url", None)
+        )
         model = OpenAIModel(
             model_name=self.config.get('agents.home_automation.model', 'gpt-4-turbo-preview'),
             provider=provider
@@ -205,7 +219,8 @@ class HomeAutomationAgent(BaseAgent[HomeAutomationResponse, ToolParamSpec]):
             model,
             system_prompt=self._get_system_prompt(),
             deps_type=NexusSupportDependencies,
-            result_type=HomeAutomationResponse
+            result_tool_name='report_final_state',
+            result_type=HomeAutomationResponse # type: ignore[arg-type]
         )
     
     def run_sync(self, prompt: str) -> AgentRunResult[HomeAutomationResponse]:
@@ -340,7 +355,8 @@ class PydanticAgent:
                 )]
                 return ModelResponse(parts=tool_calls)
             elif isinstance(result.data, HomeAutomationResponse):
-                return ModelResponse(parts=[TextPart(content=result.data.text)])
+                message = result.data.summary_message if isinstance(result.data, HomeAutomationResponseStruct) else result.data
+                return ModelResponse(parts=[TextPart(content=message)])
         except Exception as e:
             logger.debug(f"Home automation processing failed: {e}")
         return ModelResponse(parts=[])
