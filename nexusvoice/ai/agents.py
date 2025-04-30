@@ -26,7 +26,7 @@ class Agent(threading.Thread):
         self.config = config
         self.agent_id = agent_id
         self.resource_pool = resource_pool
-        self.inference_engine = None
+        self._inference_engine = None
         self.request_queue = queue.Queue()  # Queue for incoming tasks
         self.history = []  # Conversation history
         self.running = False
@@ -35,6 +35,11 @@ class Agent(threading.Thread):
         # Set TOKENIZERS_PARALLELISM to True
         os.environ["TOKENIZERS_PARALLELISM"] = "true"
 
+    @property
+    def inference_engine(self):
+        assert self._inference_engine is not None, "Inference engine not initialized"
+        return self._inference_engine
+    
     def stop(self):
         """Stops the agent gracefully."""
         self.running = False
@@ -85,7 +90,7 @@ class Agent(threading.Thread):
         logger.info(f"Agent {self.agent_id} Started.")
         self._init_conversation()
 
-        self.inference_engine = self.resource_pool.getResource(
+        self._inference_engine = self.resource_pool.getResource(
             self.config.llm.name,
             model_id=self.config.llm.model)
 
