@@ -1,7 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Generic, List, Optional, TypeVar, Union
 from typing_extensions import ParamSpec
-from cohere import Usage
 from nexusvoice.core.config import NexusConfig
 from openai import AsyncOpenAI
 from pydantic_ai.models.openai import OpenAIModel
