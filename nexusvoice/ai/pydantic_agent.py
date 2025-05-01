@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from typing import Generic, List, Optional, TypeVar, Union
 from typing_extensions import ParamSpec
+from cohere import Usage
 from nexusvoice.core.config import NexusConfig
 from openai import AsyncOpenAI
 from pydantic_ai.models.openai import OpenAIModel
@@ -19,6 +19,7 @@ from pathlib import Path
 
 from nexusvoice.core.api.base import ModelResponse
 from nexusvoice.utils.logging import get_logger
+from nexusvoice.ai.types import NexusSupportDependencies, RequestType
 
 logger = get_logger(__name__)
 
@@ -26,15 +27,6 @@ logger = get_logger(__name__)
 ROOT_DIR = Path(__file__).parent.parent.parent
 MODEL_DIR = ROOT_DIR / "nexusvoice" / "models"
 
-
-@dataclass
-class NexusSupportDependencies:
-    config: NexusConfig
-
-class RequestType(BaseModel):
-    """The type of request being made"""
-    type: str = Field(description="The type of request")
-    confidence: float = Field(description="Confidence score for the classification")
 
 class HomeAutomationAction(BaseModel):
     intent: str = Field(..., description="The action to perform (e.g., turn_on, turn_off, raise, lower)")
