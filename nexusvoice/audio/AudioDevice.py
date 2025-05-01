@@ -1,7 +1,9 @@
+from typing import Generic
 import pyaudio
 from math import ceil
 import numpy as np
 import threading
+from collections import deque
 import queue
 import time
 from scipy.signal import stft, istft
@@ -23,7 +25,7 @@ MAX_PLAYBACK_BUFFER_AGE = 3  # seconds
 
 class AudioDevice:
     def __init__(self, format=FORMAT, rate=RATE, channels=CHANNELS, chunk_size=CHUNK):
-        self.audio = pyaudio.PyAudio()
+        self._audio = pyaudio.PyAudio()
         self.mic_index = -1
         self.speaker_index = -1
         self._find_devices()
@@ -33,8 +35,8 @@ class AudioDevice:
         self.channels = channels
         self.chunk_size = chunk_size
         
-        self.mic_buffer = queue.deque(maxlen=MIC_BUFFER_CHUNKS)
-        self.mic_buffer_unfiltered = queue.deque(maxlen=MIC_BUFFER_CHUNKS)
+        self.mic_buffer = deque(maxlen=MIC_BUFFER_CHUNKS)
+        self.mic_buffer_unfiltered = deque(maxlen=MIC_BUFFER_CHUNKS)
         self.mic_lock = threading.Lock()
         self.mic_buffer_ready = threading.Condition(self.mic_lock)
         self.mic_ready = threading.Event()
@@ -67,6 +69,11 @@ class AudioDevice:
         # Wait for both threads to be ready
         self.playback_ready.wait()
         self.mic_ready.wait()
+
+    @property
+    def audio(self):
+        assert self._audio is not None, "Audio not initialized"
+        return self._audio
 
     def set_delay(self, delay):
         self.delay = delay
@@ -180,7 +187,7 @@ class AudioDevice:
             np_playback = self.playback_buffer.extract_frames(frame_start, len(mic_frame))
 
         # Log mic average RMS volume 
-        mic_avg = np.sqrt(max(np.mean(np.square(mic_frame.as_array())), 0))
+        mic_avg = np.sqrt(np.max(np.mean(np.square(mic_frame.as_array())), 0))
         
         logger.trace(f"Mic Frame: {mic_frame.timestamp:.3f} - {mic_frame.end_time():.3f} ({mic_avg:.1f})")
 
@@ -254,18 +261,19 @@ class AudioDevice:
             return mic_frame
 
         # Clip the cleaned audio to the range of int16 and convert back to original format
-        np_type = mic_frame.get_np_type()
-        min_range = np.iinfo(np_type).min
-        max_range = np.iinfo(np_type).max
+        np_type, type_info = mic_frame.get_type_info()
+        min_range = type_info.min
+        max_range = type_info.max
+
         cleaned_clip = np.clip(cleaned_time, min_range, max_range).astype(np_type)
 
-        return AudioData(cleaned_clip, format=mic_frame.format, channels=mic_frame.channels, rate=mic_frame.rate)
+        return AudioData(cleaned_clip.tobytes(), format=mic_frame.format, channels=mic_frame.channels, rate=mic_frame.rate)
 
-    def read(self, size: int = None) -> np.ndarray:
+    def read(self, size: int = -1) -> np.ndarray:
         assert self.running, "AudioDevice is not running"
 
         result = []
-        if size is None:
+        if size == -1:
             size = self.chunk_size
         frames_remaining = size
 
@@ -362,7 +370,9 @@ class AudioDevice:
 
     def shutdown(self):
         self.running = False
-        self._mic_thread.join()
-        self._playback_thread.join()
+        if self._mic_thread is not None:
+            self._mic_thread.join()
+        if self._playback_thread is not None:
+            self._playback_thread.join()
         self.audio.terminate()
-        self.audio = None
+        self._audio = None

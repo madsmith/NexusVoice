@@ -1,3 +1,4 @@
+from typing import Optional
 import numpy as np
 from pathlib import Path
 import threading
@@ -9,22 +10,36 @@ logger = get_logger(__name__)
 
 from nexusvoice.ai.InferenceEngine import InferenceEngineBase
 
-class AudioInferenceEngine(InferenceEngineBase):
+class AudioInferenceEngine(InferenceEngineBase[np.ndarray, str]):
     def __init__(self, model_id):
         super().__init__()
         self.model_id = model_id
-        self.device = None
-        self.processor = None
-        self.model = None
+        self._device = None
+        self._processor: Optional[WhisperProcessor]= None
+        self._model = None
         self.lock = threading.Lock()
-        pass
+    
+    @property
+    def device(self):
+        assert self._device is not None, "Device not initialized"
+        return self._device
+    
+    @property
+    def processor(self):
+        assert self._processor is not None, "Processor not initialized"
+        return self._processor
+    
+    @property
+    def model(self):
+        assert self._model is not None, "Model not initialized"
+        return self._model
 
     def initialize(self):
         self.initDevice()
         self.initModel()
 
     def initDevice(self):
-        self.device = torch.device(
+        self._device = torch.device(
             "mps" if torch.mps.is_available()
               else "cuda" if torch.cuda.is_available() 
               else "cpu"
@@ -32,12 +47,13 @@ class AudioInferenceEngine(InferenceEngineBase):
 
     def initModel(self):
         # Attempt to load the model locally first
+        model = None
         for local_only in [True, False]:
             try:
-                self.processor = WhisperProcessor.from_pretrained(
+                self._processor = WhisperProcessor.from_pretrained(
                     self.model_id,
                     return_attention_mask=True,
-                    local_files_only=local_only)
+                    local_files_only=local_only) # type: ignore
                 model = WhisperForConditionalGeneration.from_pretrained(
                     self.model_id,
                     local_files_only=local_only)
@@ -47,27 +63,31 @@ class AudioInferenceEngine(InferenceEngineBase):
                 # Print statck trace of e
                 logger.debug(e, exc_info=True)
 
-        if self.processor is None or model is None:
+        if self._processor is None or model is None:
             raise RuntimeError("Failed to load model or processor.")
         
-        model.generation_config.forced_decoder_ids = None
+        if model.generation_config:
+            model.generation_config.forced_decoder_ids = None
 
         # Load model to device
-        self.model = model.to(self.device)
+        self._model = model.to(self.device) # type: ignore
 
         self._warmup()
 
     def _warmup(self):
         dummy_input = np.zeros(3000, dtype=np.int16)
-        self.infer(dummy_input, 16000)
+        self.infer(dummy_input, sampling_rate=16000)
 
-    def infer(self, audio, sampling_rate, **inference_params):
+    def infer(self, inputs, **inference_params):
+        if "sampling_rate" not in inference_params:
+            raise ValueError("sampling_rate is required for audio inference")
+        sampling_rate = inference_params["sampling_rate"]
         with self.lock:
             # Tokenize the audio inputs
             inputs = self.processor(
-                audio,
+                inputs,
                 sampling_rate=sampling_rate,
-                return_tensors="pt").to(self.device)
+                return_tensors="pt").to(self._device)
             
             input_features = inputs.input_features
             attention_mask = inputs.attention_mask if "attention_mask" in inputs else None

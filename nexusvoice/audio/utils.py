@@ -210,7 +210,7 @@ class AudioData:
     
     def as_array(self, dtype=None) -> np.ndarray:
         """ Convert bytes to numpy array """
-        sample_dtype = self.get_np_type()
+        sample_dtype, _ = self.get_type_info()
 
         np_array = np.frombuffer(self.frames, dtype=sample_dtype)
 
@@ -234,16 +234,16 @@ class AudioData:
     def end_time(self) -> float:
         return self.timestamp + self.duration()
     
-    def get_np_type(self):
+    def get_type_info(self):
         sample_size = pyaudio.get_sample_size(self.format)
         if sample_size == 1:
-            return np.uint8
+            return np.uint8, np.iinfo(np.uint8)
         elif sample_size == 2:
-            return np.int16
+            return np.int16, np.iinfo(np.int16)
         elif sample_size == 4:
-            return np.int32
+            return np.int32, np.iinfo(np.int32)
         elif sample_size == 8:
-            return np.float64
+            return np.float64, np.finfo(np.float64)
         else:
             raise ValueError(f"Unsupported sample size {sample_size}")
 

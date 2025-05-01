@@ -1,4 +1,5 @@
 import logging
+from nexusvoice.core.config import load_config
 from omegaconf import OmegaConf
 
 from nexusvoice.utils.logging import get_logger
@@ -6,6 +7,7 @@ logger = get_logger(__name__)
 from nexusvoice.client import NexusVoiceClient
 
 def main():
+    client = None
     try:
         from nexusvoice.utils.logging import StackTraceFormatter
         # logging.basicConfig(level=logging.DEBUG, format="%(message)s")
@@ -18,7 +20,7 @@ def main():
         logging.basicConfig(level=log_level, style="{", format=log_format, handlers=[handler])
 
         logger.debug("Loading config")
-        config = OmegaConf.load("config.yml")
+        config = load_config()
 
         logger.debug("Creating NexusVoiceClient")
         client = NexusVoiceClient("test", config)
@@ -26,7 +28,8 @@ def main():
 
         client.join()
     except KeyboardInterrupt:
-        client.stop()
+        if client:
+            client.stop()
     except Exception as e:
         logger.error(e)
 

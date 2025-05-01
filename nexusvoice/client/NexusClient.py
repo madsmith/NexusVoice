@@ -290,7 +290,7 @@ class NexusVoiceClient(threading.Thread):
         np_audio = np.frombuffer(command.audio_bytes, dtype=NUMPY_AUDIO_FORMAT)
 
         # First use Whisper for STT
-        transcription = self.whisper_engine.infer(np_audio, AUDIO_SAMPLE_RATE)
+        transcription = self.whisper_engine.infer(np_audio, sampling_rate=AUDIO_SAMPLE_RATE)
         transcription = transcription.strip()
 
         logger.info(f"Transcription: {transcription}")
@@ -392,7 +392,7 @@ class NexusVoiceClient(threading.Thread):
         # Convert audio bytes into numpy array
         np_audio = np.frombuffer(command.audio_bytes, dtype=NUMPY_AUDIO_FORMAT)
 
-        transcription = self.whisper_engine.infer(np_audio, AUDIO_SAMPLE_RATE)
+        transcription = self.whisper_engine.infer(np_audio, sampling_rate=AUDIO_SAMPLE_RATE)
 
         if getattr(self, 'save_recordings', False):
             # Create the recordings directory if it doesn't exist
