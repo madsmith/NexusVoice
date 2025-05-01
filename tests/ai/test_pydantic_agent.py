@@ -1,4 +1,4 @@
-from nexusvoice.ai.pydantic_agent import PydanticAgent
+from nexusvoice.ai.pydantic_agent import PydanticAgentAPI
 from nexusvoice.core.api.base import ModelResponse
 from nexusvoice.core.config import load_config
 from pydantic_ai.messages import TextPart
@@ -6,7 +6,7 @@ import pytest
 
 def test_pydantic_agent_must_be_started():
     config = load_config()
-    agent = PydanticAgent(config, "test_client_id")
+    agent = PydanticAgentAPI(config, "test_client_id")
     with pytest.raises(AssertionError):
         agent.classifier_agent
     with pytest.raises(AssertionError):
@@ -21,7 +21,7 @@ def test_pydantic_agent_must_be_started():
 
 def test_pydantic_agent_process_request_home_automation():
         config = load_config()
-        agent = PydanticAgent(config, "test_client_id")
+        agent = PydanticAgentAPI(config, "test_client_id")
         agent.start()
         
         response = agent.process_request("Turn on the living room lights")
@@ -34,7 +34,7 @@ def test_pydantic_agent_process_request_home_automation():
 
 def test_pydantic_agent_process_request_conversational():
     config = load_config()
-    agent = PydanticAgent(config, "test_client_id")
+    agent = PydanticAgentAPI(config, "test_client_id")
     agent.start()
 
     response = agent.process_request("What is the capital of Ohio?")

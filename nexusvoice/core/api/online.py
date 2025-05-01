@@ -12,7 +12,7 @@ from nexusvoice.protocol import mcp
 
 logger = get_logger(__name__)
 
-from nexusvoice.ai.pydantic_agent import NexusSupportDependencies, PydanticAgent
+from nexusvoice.ai.pydantic_agent import NexusSupportDependencies, PydanticAgentAPI
 from nexusvoice.core.api.tool_registry import tool_registry
 
 from nexusvoice.tools.weather import get_weather_tool
@@ -35,7 +35,7 @@ class NexusAPIOnline(NexusAPI):
         super().__init__()
         self.config = config
         # TODO: Refactor client ID 
-        self.agent = PydanticAgent(config, "TO BE DETERMINED CLIENT ID")
+        self.agent = PydanticAgentAPI(config, "TO BE DETERMINED CLIENT ID")
         self.agent.start()
         self.register_tools()
 

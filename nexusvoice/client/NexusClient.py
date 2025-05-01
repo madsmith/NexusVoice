@@ -1,5 +1,5 @@
 from typing import Optional
-from nexusvoice.ai.pydantic_agent import ModelResponse, PydanticAgent
+from nexusvoice.ai.pydantic_agent import ModelResponse, PydanticAgentAPI
 
 import queue
 import threading
@@ -65,7 +65,7 @@ class NexusVoiceClient(threading.Thread):
         self._vad_model: Optional[OnnxWrapper] = None
         self._whisper_engine: Optional[AudioInferenceEngine] = None   
         self._tts_engine: Optional[TTSInferenceEngine] = None
-        self._agent: Optional[PydanticAgent] = None   
+        self._agent: Optional[PydanticAgentAPI] = None   
         
         self._command_queue = queue.Queue()
 
@@ -104,7 +104,7 @@ class NexusVoiceClient(threading.Thread):
         return self._tts_engine
 
     @property
-    def agent(self) -> PydanticAgent:
+    def agent(self) -> PydanticAgentAPI:
         assert self._agent is not None, f"{self.__class__.__name__} not initialized, agent not available"
         return self._agent
 
@@ -176,7 +176,7 @@ class NexusVoiceClient(threading.Thread):
     def _initialize_agent(self):
         logger.info("Initializing agent...")
 
-        self._agent = PydanticAgent(self.config, self.client_id)
+        self._agent = PydanticAgentAPI(self.config, self.client_id)
         self._agent.start()
 
     def _initialize_threads(self):

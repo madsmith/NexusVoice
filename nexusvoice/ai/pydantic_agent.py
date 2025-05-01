@@ -270,7 +270,7 @@ class ConversationalAgent(BaseAgent[ConversationResponse, ToolParamSpec]):
     def register_tool(self, tool_fn: ToolFuncContext[NexusSupportDependencies, ToolParamSpec]):
         self._agent.tool(tool_fn)
 
-class PydanticAgent:
+class PydanticAgentAPI:
     def __init__(self, config: NexusConfig, client_id: str):
         self.config = config
         self.client_id = client_id
