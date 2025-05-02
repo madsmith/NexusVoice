@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Generic, List, Optional, TypeVar, Union
 from typing_extensions import ParamSpec
+from nexusvoice.ai.LocalClassifierAgent import LocalClassifierAgentFactory
 from nexusvoice.core.config import NexusConfig
 from openai import AsyncOpenAI
 from pydantic_ai.models.openai import OpenAIModel
@@ -271,7 +272,7 @@ class PydanticAgentAPI:
         self._conversational_agent = None
 
     @property
-    def classifier_agent(self) -> LocalClassifierAgent:
+    def classifier_agent(self) -> Agent[NexusSupportDependencies, RequestType]:
         assert self._classifier_agent is not None, "Classifier agent not initialized"
         return self._classifier_agent
     
@@ -289,7 +290,7 @@ class PydanticAgentAPI:
         logger.debug("Initializing agents...")
         support_deps = NexusSupportDependencies(config=self.config)
 
-        self._classifier_agent = LocalClassifierAgent(support_deps)
+        self._classifier_agent = LocalClassifierAgentFactory.create(support_deps)
         self._home_agent = HomeAutomationAgent(support_deps)
         self._conversational_agent = ConversationalAgent(support_deps)
     
@@ -323,7 +324,8 @@ class PydanticAgentAPI:
 
     def _classify_request(self, text: str) -> RequestType:
         try:
-            result = self.classifier_agent.run_sync(text)
+            deps = NexusSupportDependencies(config=self.config)
+            result = self.classifier_agent.run_sync(text, deps=deps)
             return result.data
         except Exception as e:
             logger.warning(f"Local classifier failed: {e}, defaulting to conversation")
