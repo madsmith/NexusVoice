@@ -1,7 +1,6 @@
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, List
 from nexusvoice.core.config import NexusConfig
 from pydantic_ai.messages import ModelRequest, TextPart, ToolCallPart, UserPromptPart
 from pydantic_ai.models import Model, ModelMessage, ModelRequestParameters, ModelResponse, ModelSettings
