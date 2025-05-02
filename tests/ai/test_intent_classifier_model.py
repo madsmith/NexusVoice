@@ -1,5 +1,5 @@
 import pytest
-from nexusvoice.ai.LocalModel import IntentClassifierModel, LocalClassifierAgentFactory
+from nexusvoice.ai.LocalClassifierAgent import IntentClassifierModel, LocalClassifierAgentFactory
 from nexusvoice.ai.types import NexusSupportDependencies, RequestType
 from pydantic_ai.agent import Agent, AgentRunResult
 from nexusvoice.core.config import load_config
