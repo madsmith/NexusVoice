@@ -36,7 +36,8 @@ nexus-server = "nexusvoice.server.main:main"
 dev = [
     "matplotlib>=3.10",
     "scikit-learn>=1.4.0",
-    "pytest>=8.3.0"
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.26.0"
 ]
 
 [build-system]
