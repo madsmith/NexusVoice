@@ -170,7 +170,7 @@ class Agent(threading.Thread):
         """Simulates AI inference (Replace with actual AI model call)."""
         logger.debug(f"[Agent {self.agent_id}] Running inference...")
 
-        tokenizer = self.inference_engine.getTokenizer()
+        tokenizer = self.inference_engine.tokenizer
         
         inference_engine = self.resource_pool.getResource(
             "Llama-3.2",
