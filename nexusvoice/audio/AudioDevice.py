@@ -187,7 +187,8 @@ class AudioDevice:
             np_playback = self.playback_buffer.extract_frames(frame_start, len(mic_frame))
 
         # Log mic average RMS volume 
-        mic_avg = np.sqrt(np.max(np.mean(np.square(mic_frame.as_array())), 0))
+        frames = mic_frame.as_array().astype(np.int32)
+        mic_avg = np.sqrt(np.max(np.mean(np.square(frames)), 0))
         
         logger.trace(f"Mic Frame: {mic_frame.timestamp:.3f} - {mic_frame.end_time():.3f} ({mic_avg:.1f})")
 
