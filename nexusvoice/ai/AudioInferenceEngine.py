@@ -82,6 +82,7 @@ class AudioInferenceEngine(InferenceEngineBase[np.ndarray, str]):
         if "sampling_rate" not in inference_params:
             raise ValueError("sampling_rate is required for audio inference")
         sampling_rate = inference_params["sampling_rate"]
+        inference_params.pop("sampling_rate")
         with self.lock:
             # Tokenize the audio inputs
             inputs = self.processor(
