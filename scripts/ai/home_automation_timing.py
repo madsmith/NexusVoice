@@ -1,7 +1,9 @@
 import time
 import argparse
-from nexusvoice.ai.pydantic_agent import HomeAutomationAgent, NexusSupportDependencies
+from nexusvoice.ai.LocalHomeAutomationAgent import LocalHomeAutomationAgentFactory
+from nexusvoice.ai.pydantic_agent import BaseAgent, HomeAutomationAgent, NexusSupportDependencies
 from nexusvoice.core.config import load_config
+from pydantic_ai import Agent
 from pydantic_ai.providers.openai import OpenAIProvider
 
 # Example prompt and number of samples
@@ -49,6 +51,7 @@ def agent_variants():
     )
     yield "LM - Hermes 3 LLama 3.2 3B", lambda: HomeAutomationAgent(NexusSupportDependencies(config=config), provider=custom_provider)
 
+    yield "Local - Llama 3.2 3B Instruct", lambda: LocalHomeAutomationAgentFactory.create(NexusSupportDependencies(config=config))
     # config.set("agents.home_automation.model", "llama-3.3-70b-instruct")
     # custom_provider = OpenAIProvider(s
     #     api_key=config.get("openai.api_key", ""),
@@ -84,7 +87,12 @@ def run_timing(num_samples=5, name_filter=None):
         # Setup agent and tool
         home_control, calls = home_control_factory()
         agent = agent_factory()
-        agent.register_tool(home_control)
+        if isinstance(agent, Agent):
+            agent.tool(home_control)
+        elif isinstance(agent, BaseAgent):
+            agent.register_tool(home_control)
+        else:
+            raise ValueError(f"Unknown agent type: {type(agent)}")
         
         # Run timing
         durations = []
@@ -93,7 +101,13 @@ def run_timing(num_samples=5, name_filter=None):
             # Time the call
             start = time.time()
             try:
-                result = agent.run_sync(test_prompt)
+                if isinstance(agent, Agent):
+                    deps = NexusSupportDependencies(config=load_config())
+                    result = agent.run_sync(test_prompt, deps=deps)
+                elif isinstance(agent, BaseAgent):
+                    result = agent.run_sync(test_prompt)
+                else:
+                    raise ValueError(f"Unknown agent type: {type(agent)}")
             except Exception as e:
                 print(f"[{name}] Sample {i+1}: Exception: {str(e)}")
                 continue
