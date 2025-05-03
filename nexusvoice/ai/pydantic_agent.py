@@ -139,42 +139,6 @@ class LocalClassifierAgent(BaseAgent[RequestType, ToolParamSpec]):
     def register_tool(self, tool_fn: ToolFuncContext[NexusSupportDependencies, ToolParamSpec]):
         pass
 
-class FastClassifierAgent(BaseAgent[RequestType, ToolParamSpec]):
-    """Fast OpenAI classifier using a smaller, cheaper model"""
-    
-    def __init__(self, support_deps: NexusSupportDependencies):
-        super().__init__(support_deps)
-
-        provider = OpenAIProvider(api_key=self.config.get("openai.api_key", ""))
-        model = OpenAIModel(
-            model_name=self.config.get("agent.classifier.fast.model", "gpt-3.5-turbo"),
-            provider=provider
-        )
-
-        self._agent = Agent[NexusSupportDependencies, RequestType](
-            model,
-            system_prompt=self._get_system_prompt(),
-            deps_type=NexusSupportDependencies,
-            result_type=RequestType,
-            result_tool_name='final_result'
-        )
-    
-    def run_sync(self, prompt: str) -> AgentRunResult[RequestType]:
-        return self._agent.run_sync(user_prompt=prompt, deps=self.deps)
-
-    def _get_system_prompt(self) -> str:
-        default_prompt = (
-            "You are a classifier that determines if a request is related to home automation "
-            "or general conversation. Home automation requests involve controlling devices "
-            "like lights, fans, or shades. Respond ONLY with the classification and confidence "
-            "score as a JSON object with 'type' and 'confidence' fields. Type must be either "
-            "'home_automation' or 'conversation'. Confidence must be between 0 and 1."
-        )
-        return self._config.get("agent.classifier.fast.system_prompt", default_prompt)
-
-    def register_tool(self, tool_fn: ToolFuncContext[NexusSupportDependencies, ToolParamSpec]):
-        self._agent.tool(tool_fn)
-
 class HomeAutomationAgent(BaseAgent[HomeAutomationResponse, ToolParamSpec]):
     """Agent for home automation using pydantic_ai"""
     
