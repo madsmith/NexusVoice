@@ -20,7 +20,7 @@ class NexusAPILocal(NexusAPI):
         self.config = config
         self.agent_manager = AgentManager(config)
 
-    def agent_inference(self, agent_id, inputs):
+    def agent_inference(self, agent_id, inputs) -> str:
         agent = self.agent_manager.get_agent(agent_id)
 
         future_result = agent.process_request(inputs)
@@ -32,14 +32,16 @@ class NexusAPILocal(NexusAPI):
     
     
     def mcp_agent_inference(self, agent_id: str, inputs) -> ModelResponse:
-        result_text = self.agent_inference(agent_id, inputs)
+        assert isinstance(inputs, mcp.UserMessage), "Inputs must be a UserMessage"
+        result_text = self.agent_inference(agent_id, inputs.text)
 
         logger.debug(f"Agent Inference Result: \n========\n{result_text}\n========")
 
         # Try to parse as ToolCall
         try:
             parsed: mcp.ModelMessage = mcp.ModelMessage.model_validate_json(try_repair_json(result_text))
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Failed to parse agent inference result: {e}")
             return ModelResponse(parts=[TextPart(content=result_text)])
 
         if parsed.tool_calls:
