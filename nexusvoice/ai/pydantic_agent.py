@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Generic, List, Optional, TypeVar, Union
 from typing_extensions import ParamSpec
+from nexusvoice.ai.HomeAutomationAgent import HomeAutomationAgentFactory
 from nexusvoice.ai.LocalClassifierAgent import LocalClassifierAgentFactory
 from nexusvoice.core.config import NexusConfig
 from openai import AsyncOpenAI
@@ -225,7 +226,7 @@ class PydanticAgentAPI:
         return self._classifier_agent
     
     @property
-    def home_agent(self) -> HomeAutomationAgent:
+    def home_agent(self) -> Agent[NexusSupportDependencies, HomeAutomationResponse]:
         assert self._home_agent is not None, "Home automation agent not initialized"
         return self._home_agent
     
@@ -239,7 +240,7 @@ class PydanticAgentAPI:
         support_deps = NexusSupportDependencies(config=self.config)
 
         self._classifier_agent = LocalClassifierAgentFactory.create(support_deps)
-        self._home_agent = HomeAutomationAgent(support_deps)
+        self._home_agent = HomeAutomationAgentFactory.create(support_deps)
         self._conversational_agent = ConversationalAgent(support_deps)
     
     def initialize(self):
@@ -288,7 +289,8 @@ class PydanticAgentAPI:
     def _process_home_automation(self, text: str) -> ModelResponse:
         logger.debug("Processing home automation request...")
         try:
-            result = self.home_agent.run_sync(text)
+            deps = NexusSupportDependencies(config=self.config)
+            result = self.home_agent.run_sync(text, deps=deps)
             if isinstance(result.data, HomeAutomationAction):
                 tool_calls: List[ModelResponsePart] = [ToolCallPart(
                     tool_name="home_control",
