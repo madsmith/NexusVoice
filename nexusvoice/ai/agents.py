@@ -45,7 +45,7 @@ class Agent(threading.Thread):
         self.running = False
         self.request_queue.put((Agent.AgentCommand.SHUTDOWN, None))  # Wake up the thread to exit
 
-    def process_request(self, prompt) -> Future:
+    def process_request(self, prompt) -> Future[str]:
         """Queues a request for processing and returns a Future immediately."""
         future = Future()
         logger.debug(f"[Agent {self.agent_id}]: Received request '{prompt}'")
