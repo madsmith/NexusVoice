@@ -16,7 +16,7 @@ from nexusvoice.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
-from nexusvoice.tools.weather import get_weather_tool
+from nexusvoice.tools.weather import get_weather
 
 def home_control(ctx: RunContext[NexusSupportDependencies], intent: str, device: str, room: str) -> dict[str, str]:
     """
@@ -44,7 +44,6 @@ class NexusAPIOnline(NexusAPI):
     def __init__(self, config: NexusConfig):
         super().__init__(config)
 
-
         self._classifier_agent = None
         self._home_agent = None
         self._conversational_agent = None
@@ -56,6 +55,10 @@ class NexusAPIOnline(NexusAPI):
         self._classifier_agent = LocalClassifierAgentFactory.create(self._deps)
         self._home_agent = HomeAutomationAgentFactory.create(self._deps)
         self._conversational_agent = ConversationalAgentFactory.create(self._deps)
+
+        # Register tools
+        self._home_agent.tool(home_control)
+        self._conversational_agent.tool(get_weather)
 
     @property
     def classifier_agent(self) -> Agent[NexusSupportDependencies, RequestType]:

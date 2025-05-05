@@ -4,13 +4,20 @@ from pydantic_ai import RunContext
 import requests
 
 # TODO: put config in RunContext
-def get_weather_tool(ctx: RunContext[NexusSupportDependencies], city: str, state: Optional[str] = None) -> dict:
+def get_weather(ctx: RunContext[NexusSupportDependencies], city: str, state: Optional[str] = None) -> dict:
     """
     Get current weather information for a specified city.
     
     Args:
-        ctx: The run context
-        city: The name of the city to check
+        ctx (RunContext[NexusSupportDependencies]): The run context.
+        city (str): The city to get the weather for.
+        state (str, optional): The state to get the weather for.
+
+    Returns:
+        dict: The current weather, with the following keys:
+            - city: The city name
+            - temp_f: The current temperature in Fahrenheit
+            - condition: The current weather condition
     """
     config = ctx.deps.config
 
