@@ -308,8 +308,14 @@ class NexusVoiceClient(threading.Thread):
 
         logger.info(f"Response: {response.text}")
         
+        spoken_response = response.text
+        if not spoken_response:
+            spoken_response = self.config.get(
+                "nexus.client.no_response_error",
+                "Something went wrong, there is no response.")
+            
         # Use TTS engine to speak the response
-        audio_tensor = self.tts_engine.infer(response.text, voice=self.config.tts.voice)
+        audio_tensor = self.tts_engine.infer(spoken_response, voice=self.config.tts.voice)
 
         # Convert the audio tensor to numpy array
         audio = self._tensor_to_int16(self._resample_audio(audio_tensor))
