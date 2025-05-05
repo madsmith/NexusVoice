@@ -1,12 +1,10 @@
 from typing import Optional
-from nexusvoice.ai.pydantic_agent import PydanticAgentAPI
 
 import queue
 import threading
 import logging
 from nexusvoice.core.config import NexusConfig
 import numpy as np
-import omegaconf
 from openwakeword.model import Model as OpenWakeWordModel
 from pathlib import Path
 import pyaudio
@@ -22,7 +20,6 @@ from nexusvoice.audio.utils import AudioBuffer, save_recording
 from nexusvoice.audio.AudioDevice import AudioDevice
 from nexusvoice.core.api import NexusAPI
 from nexusvoice.core.api.online import NexusAPIOnline
-from nexusvoice.protocol.mcp import UserMessage
 
 
 AUDIO_FORMAT = pyaudio.paInt16
@@ -64,7 +61,6 @@ class NexusVoiceClient(threading.Thread):
         self._vad_model: Optional[OnnxWrapper] = None
         self._whisper_engine: Optional[AudioInferenceEngine] = None   
         self._tts_engine: Optional[TTSInferenceEngine] = None
-        self._agent: Optional[PydanticAgentAPI] = None   
         
         self._command_queue = queue.Queue()
 
@@ -102,11 +98,6 @@ class NexusVoiceClient(threading.Thread):
         assert self._tts_engine is not None, f"{self.__class__.__name__} not initialized, tts engine not available"
         return self._tts_engine
 
-    @property
-    def agent(self) -> PydanticAgentAPI:
-        assert self._agent is not None, f"{self.__class__.__name__} not initialized, agent not available"
-        return self._agent
-
     def _get_thread_name(self, client_id: str = "") -> str:
         return f"NexusVoiceClient::{client_id}"
     
@@ -121,7 +112,6 @@ class NexusVoiceClient(threading.Thread):
         self._initialize_VAD_model()
         self._initialize_whisper_model()
         self._initialize_TTS_model()
-        self._initialize_agent()
 
         self._initialize_threads()
 
@@ -171,12 +161,6 @@ class NexusVoiceClient(threading.Thread):
         voice = self.config.tts.get("voice", None)
         self._tts_engine = TTSInferenceEngine(voices=voice)
         self._tts_engine.initialize()
-
-    def _initialize_agent(self):
-        logger.info("Initializing agent...")
-
-        self._agent = PydanticAgentAPI(self.config, self.client_id)
-        self._agent.start()
 
     def _initialize_threads(self):
         logger.info("Initializing threads")
