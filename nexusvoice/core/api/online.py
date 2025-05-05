@@ -3,14 +3,18 @@ from pydantic_ai import Agent, RunContext
 from nexusvoice.ai.ConversationalAgent import ConversationalAgentFactory
 from nexusvoice.ai.HomeAutomationAgent import HomeAutomationAgentFactory
 from nexusvoice.ai.LocalClassifierAgent import LocalClassifierAgentFactory
-from nexusvoice.ai.types import ConversationResponse, HomeAutomationResponse, HomeAutomationResponseStruct, RequestType
+from nexusvoice.ai.types import (
+    ConversationResponse,
+    HomeAutomationResponse,
+    HomeAutomationResponseStruct,
+    NexusSupportDependencies,
+    RequestType
+)
 from nexusvoice.core.api import NexusAPI
 from nexusvoice.core.config import NexusConfig
 from nexusvoice.utils.logging import get_logger
 
 logger = get_logger(__name__)
-
-from nexusvoice.ai.pydantic_agent import NexusSupportDependencies
 
 from nexusvoice.tools.weather import get_weather_tool
 

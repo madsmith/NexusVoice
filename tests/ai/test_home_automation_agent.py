@@ -1,4 +1,5 @@
-from nexusvoice.ai.pydantic_agent import HomeAutomationAgent, HomeAutomationResponse, HomeAutomationResponseStruct, NexusSupportDependencies
+from nexusvoice.ai.HomeAutomationAgent import HomeAutomationAgentFactory
+from nexusvoice.ai.types import HomeAutomationResponse, HomeAutomationResponseStruct, NexusSupportDependencies
 from nexusvoice.utils.debug import TimeThis
 from pydantic_ai import RunContext
 from nexusvoice.core.config import load_config
@@ -25,40 +26,40 @@ def home_control_tool():
 def test_home_automation_basic():
     config = load_config()
     support_deps = NexusSupportDependencies(config=config)
-    agent = HomeAutomationAgent(support_deps)
+    agent = HomeAutomationAgentFactory.create(support_deps)
     
     # Test home automation request
-    result = agent.run_sync("Turn on the living room lights")
+    result = agent.run_sync("Turn on the living room lights", deps=support_deps)
 
     response = result.data
     assert isinstance(response, HomeAutomationResponse)
     summary_message = HomeAutomationResponseStruct.extract_message(response)
-    assert "living room" in summary_message
-    assert "on" in summary_message
+    assert "living room" in summary_message.lower()
+    assert "on" in summary_message.lower()
 
 
 def test_home_automation_tool(home_control_tool):
     config = load_config()
     support_deps = NexusSupportDependencies(config=config)
-    agent = HomeAutomationAgent(support_deps)
+    agent = HomeAutomationAgentFactory.create(support_deps)
     
     home_control, called = home_control_tool
-    agent.register_tool(home_control)
+    agent.tool(home_control)
     
     # Test home automation request
     with TimeThis("test_home_automation_tool"):
-        result = agent.run_sync("Turn on the living room lights")
+        result = agent.run_sync("Turn on the living room lights", deps=support_deps)
 
     response = result.data
     assert isinstance(response, HomeAutomationResponse)
     summary_message = HomeAutomationResponseStruct.extract_message(response)
-    assert "living room" in summary_message
-    assert "on" in summary_message
+    assert "living room" in summary_message.lower()
+    assert "on" in summary_message.lower()
     assert called["value"], "Home automation tool was not executed"
     assert called['args']['room'], "Room not specified"
     assert called['args']['intent'], "Intent not specified"
     assert called['args']['device'], "Device not specified"
-    assert called['args']['room'] == "living room"
+    assert called['args']['room'].lower() == "living room"
     assert "on" in called['args']['intent']
     assert "light" in called['args']['device']
 
@@ -72,14 +73,14 @@ def test_home_automation_custom_provider(home_control_tool):
     )
     
     support_deps = NexusSupportDependencies(config=config)
-    agent = HomeAutomationAgent(support_deps, provider=provider)
+    agent = HomeAutomationAgentFactory.create(support_deps, provider=provider)
     
     home_control, called = home_control_tool
-    agent.register_tool(home_control)
+    agent.tool(home_control)
     
     # Test home automation request
     with TimeThis("test_home_automation_custom_provider"):
-        result = agent.run_sync("Turn on the living room lights")
+        result = agent.run_sync("Turn on the living room lights", deps=support_deps)
 
     response = result.data
     assert isinstance(response, HomeAutomationResponse)

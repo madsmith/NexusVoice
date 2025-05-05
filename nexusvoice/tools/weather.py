@@ -1,8 +1,6 @@
-import os
 from typing import Optional
-from nexusvoice.ai.pydantic_agent import NexusSupportDependencies
-from nexusvoice.core.config import load_config
-from pydantic_ai.agent import RunContext
+from nexusvoice.ai.types import NexusSupportDependencies
+from pydantic_ai import RunContext
 import requests
 
 # TODO: put config in RunContext

@@ -1,9 +1,11 @@
 import time
 import argparse
+from nexusvoice.ai.HomeAutomationAgent import HomeAutomationAgentFactory
 from nexusvoice.ai.LocalHomeAutomationAgent import LocalHomeAutomationAgentFactory
-from nexusvoice.ai.pydantic_agent import BaseAgent, HomeAutomationAgent, NexusSupportDependencies
+from nexusvoice.ai.types import NexusSupportDependencies
 from nexusvoice.core.config import load_config
 from pydantic_ai import Agent
+from pydantic_ai.providers import infer_provider
 from pydantic_ai.providers.openai import OpenAIProvider
 
 # Example prompt and number of samples
@@ -27,7 +29,8 @@ def agent_variants():
 
     for model, name in openai_models:
         config.set("agents.home_automation.model", model)
-        yield name, lambda: HomeAutomationAgent(NexusSupportDependencies(config=config))
+        provider = infer_provider("openai")
+        yield name, lambda: HomeAutomationAgentFactory.create(NexusSupportDependencies(config=config), provider=provider)
     
     # Custom provider agent
     config.set("agents.home_automation.model", "llama-3.2-8x3b-moe-dark-champion-instruct-uncensored-abliterated-18.4b")
@@ -35,21 +38,21 @@ def agent_variants():
         api_key=config.get("openai.api_key", ""),
         base_url="http://localhost:1234/v1/"
     )
-    yield "LM - LLama 3.2 8x3B Moe Instruct Uncensored", lambda: HomeAutomationAgent(NexusSupportDependencies(config=config), provider=custom_provider)
+    yield "LM - LLama 3.2 8x3B Moe Instruct Uncensored", lambda: HomeAutomationAgentFactory.create(NexusSupportDependencies(config=config), provider=custom_provider)
 
     config.set("agents.home_automation.model", "llama-3.2-3b-instruct")
     custom_provider = OpenAIProvider(
         api_key=config.get("openai.api_key", ""),
         base_url="http://localhost:1234/v1/"
     )
-    yield "LM - LLama 3.2 3B Instruct", lambda: HomeAutomationAgent(NexusSupportDependencies(config=config), provider=custom_provider)
+    yield "LM - LLama 3.2 3B Instruct", lambda: HomeAutomationAgentFactory.create(NexusSupportDependencies(config=config), provider=custom_provider)
 
     config.set("agents.home_automation.model", "hermes-3-llama-3.2-3b")
     custom_provider = OpenAIProvider(
         api_key=config.get("openai.api_key", ""),
         base_url="http://localhost:1234/v1/"
     )
-    yield "LM - Hermes 3 LLama 3.2 3B", lambda: HomeAutomationAgent(NexusSupportDependencies(config=config), provider=custom_provider)
+    yield "LM - Hermes 3 LLama 3.2 3B", lambda: HomeAutomationAgentFactory.create(NexusSupportDependencies(config=config), provider=custom_provider)
 
     yield "Local - Llama 3.2 3B Instruct", lambda: LocalHomeAutomationAgentFactory.create(NexusSupportDependencies(config=config))
     # config.set("agents.home_automation.model", "llama-3.3-70b-instruct")
@@ -89,8 +92,6 @@ def run_timing(num_samples=5, name_filter=None):
         agent = agent_factory()
         if isinstance(agent, Agent):
             agent.tool(home_control)
-        elif isinstance(agent, BaseAgent):
-            agent.register_tool(home_control)
         else:
             raise ValueError(f"Unknown agent type: {type(agent)}")
         
@@ -104,8 +105,6 @@ def run_timing(num_samples=5, name_filter=None):
                 if isinstance(agent, Agent):
                     deps = NexusSupportDependencies(config=load_config())
                     result = agent.run_sync(test_prompt, deps=deps)
-                elif isinstance(agent, BaseAgent):
-                    result = agent.run_sync(test_prompt)
                 else:
                     raise ValueError(f"Unknown agent type: {type(agent)}")
             except Exception as e:
