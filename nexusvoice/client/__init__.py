@@ -1,1 +1,1 @@
-from .NexusClient import NexusVoiceClient, NexusVoiceStandalone
+from .NexusClient import NexusVoiceClient

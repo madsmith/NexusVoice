@@ -108,6 +108,7 @@ class NexusVoiceClient(threading.Thread):
         return f"NexusVoiceClient::{client_id}"
 
     def initialize(self):
+        self._initialize_api()
         self._initialize_wake_word_model()
         self._initialize_VAD_model()
         self._initialize_whisper_model()
@@ -116,6 +117,11 @@ class NexusVoiceClient(threading.Thread):
         self._initialize_threads()
 
         self._initialize_audio_device()
+
+    def _initialize_api(self):
+        logger.info("Initializing API")
+        self._api = NexusAPIOnline(self.config)
+        self._api.initialize()
 
     def _initialize_audio_device(self):
         logger.info("Initializing audio device")
@@ -486,21 +492,3 @@ class NexusVoiceClient(threading.Thread):
         def __init__(self, text):
             self.text = text
 
-class NexusVoiceStandalone(NexusVoiceClient):
-    def __init__(self, client_id: str, config: NexusConfig):
-        super().__init__(client_id, config)
-        # TODO: Create a new variant of the API based on the config
-        self._api = NexusAPIOnline(config)
-        self._api.initialize()
-
-    def _get_thread_name(self, client_id: str = ""):
-        return f"NexusVoiceStandalone::{client_id}"
-
-class NexusVoiceOnline(NexusVoiceClient):
-    def __init__(self, client_id: str, config: NexusConfig):
-        super().__init__(client_id, config)
-        self._api = NexusAPIOnline(config)
-        self._api.initialize()
-
-    def _get_thread_name(self, client_id: str = ""):
-        return f"NexusVoiceOnline::{client_id}"

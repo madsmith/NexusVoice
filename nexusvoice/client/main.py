@@ -6,7 +6,7 @@ from omegaconf import OmegaConf
 from nexusvoice.utils.logging import get_logger
 logger = get_logger(__name__)
 
-from nexusvoice.client.NexusClient import NexusVoiceClient, NexusVoiceOnline
+from nexusvoice.client.NexusClient import NexusVoiceClient
 from nexusvoice.core.config import load_config
 
 def main():
@@ -28,7 +28,7 @@ def main():
         reset_logging(config.get("logging.suppress"))
  
         logger.debug("Creating NexusVoiceClient")
-        client = NexusVoiceOnline("test", config)
+        client = NexusVoiceClient("local", config)
         client.start()
 
         if args.cmd:
