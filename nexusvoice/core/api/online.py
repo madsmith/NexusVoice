@@ -17,7 +17,7 @@ from nexusvoice.core.api.tool_registry import tool_registry
 
 from nexusvoice.tools.weather import get_weather_tool
 
-def home_control(ctx: RunContext[NexusSupportDependencies], intent: str, device: str, room: str) -> str:
+def home_control(ctx: RunContext[NexusSupportDependencies], intent: str, device: str, room: str) -> dict[str, str]:
     """
     Turn on, off, raise, or lower a home automation device.
     
@@ -27,8 +27,17 @@ def home_control(ctx: RunContext[NexusSupportDependencies], intent: str, device:
         device: The device to control (e.g., light, fan, shade)
         room: The room where the device is located
     """
+    status = {
+        "result": f"The {device} in the {room} has been updated.  Status: {intent}",
+        "intent": intent,
+        "device": device,
+        "room": room
+    }
     print(f"Home Automation: {intent} {device} in {room}")
-    return "Done"
+    return {
+        "name": "home_control",
+        "result": "Action completed"
+    }
     
 class NexusAPIOnline(NexusAPI):
     def __init__(self, config: NexusConfig):
@@ -40,7 +49,7 @@ class NexusAPIOnline(NexusAPI):
         self.register_tools()
 
     def register_tools(self):
-        self.agent.home_agent.register_tool(home_control)
+        self.agent.home_agent.tool(home_control)
         self.agent.conversational_agent.register_tool(get_weather_tool)
 
     def agent_inference(self, agent_id: str, inputs) -> str:
