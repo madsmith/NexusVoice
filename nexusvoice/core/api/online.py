@@ -1,19 +1,16 @@
-from dataclasses import dataclass
-from typing import List
+from pydantic_ai import Agent, RunContext
+
+from nexusvoice.ai.ConversationalAgent import ConversationalAgentFactory
+from nexusvoice.ai.HomeAutomationAgent import HomeAutomationAgentFactory
+from nexusvoice.ai.LocalClassifierAgent import LocalClassifierAgentFactory
+from nexusvoice.ai.types import ConversationResponse, HomeAutomationResponse, HomeAutomationResponseStruct, RequestType
 from nexusvoice.core.api import NexusAPI
 from nexusvoice.core.config import NexusConfig
-from pydantic_ai import RunContext
-from pydantic_ai.messages import TextPart
-from pydantic_ai.messages import ToolCallPart, ToolReturnPart
-from nexusvoice.core.api.base import ModelResponse
-from nexusvoice.utils.debug import TimeThis
 from nexusvoice.utils.logging import get_logger
-from nexusvoice.protocol import mcp
 
 logger = get_logger(__name__)
 
-from nexusvoice.ai.pydantic_agent import NexusSupportDependencies, PydanticAgentAPI
-from nexusvoice.core.api.tool_registry import tool_registry
+from nexusvoice.ai.pydantic_agent import NexusSupportDependencies
 
 from nexusvoice.tools.weather import get_weather_tool
 
@@ -41,63 +38,80 @@ def home_control(ctx: RunContext[NexusSupportDependencies], intent: str, device:
     
 class NexusAPIOnline(NexusAPI):
     def __init__(self, config: NexusConfig):
-        super().__init__()
-        self.config = config
-        # TODO: Refactor client ID 
-        self.agent = PydanticAgentAPI(config, "TO BE DETERMINED CLIENT ID")
-        self.agent.start()
-        self.register_tools()
+        super().__init__(config)
 
-    def register_tools(self):
-        self.agent.home_agent.tool(home_control)
-        self.agent.conversational_agent.register_tool(get_weather_tool)
 
-    def agent_inference(self, agent_id: str, inputs) -> str:
-        response = self.agent.process_request(inputs)
+        self._classifier_agent = None
+        self._home_agent = None
+        self._conversational_agent = None
 
-        # TODO: Handle ToolCallPart
-        response_parts = [part.content for part in response.parts if isinstance(part, TextPart)]
+    def initialize(self):
+        logger.debug("Initializing agents...")
+        self._deps = NexusSupportDependencies(config=self.config)
 
-        return "\n".join(response_parts)
+        self._classifier_agent = LocalClassifierAgentFactory.create(self._deps)
+        self._home_agent = HomeAutomationAgentFactory.create(self._deps)
+        self._conversational_agent = ConversationalAgentFactory.create(self._deps)
 
-    def mcp_agent_inference(self, agent_id: str, inputs) -> ModelResponse:
-        assert inputs is not None, "Missing inference input"
-        
-        if isinstance(inputs, mcp.UserMessage):
-            inputs = inputs.text
+    @property
+    def classifier_agent(self) -> Agent[NexusSupportDependencies, RequestType]:
+        assert self._classifier_agent is not None, "Classifier agent not initialized"
+        return self._classifier_agent
+    
+    @property
+    def home_agent(self) -> Agent[NexusSupportDependencies, HomeAutomationResponse]:
+        assert self._home_agent is not None, "Home automation agent not initialized"
+        return self._home_agent
+    
+    @property
+    def conversational_agent(self) -> Agent[NexusSupportDependencies, ConversationResponse]:
+        assert self._conversational_agent is not None, "Conversational agent not initialized"
+        return self._conversational_agent
 
-        print("Input", type(inputs), inputs)
-        result: ModelResponse = self.agent.process_request(inputs)
-        
-        logger.debug(f"Agent Inference Result: \n========\n{result}\n========")
+    def prompt_agent(self, agent_id: str, prompt: str) -> str:
+        # First use the classifier to determine request type
+        # Try local classifier first
+        classification = self._classify_request(prompt)
 
-        tool_calls = [call for call in result.parts if isinstance(call, ToolCallPart)]
-        if tool_calls:
-            tool_results = []
-            for call in tool_calls:
-                with TimeThis(f"Tool Call: {call.tool_name}"):
-                    tool_fn = tool_registry.get(call.tool_name)
-                    if tool_fn:
-                        output = tool_fn(call.args)
-                        logger.debug(f"Tool Call Result: \n========\n{output}\n========")
-                        tool_results.append(ToolReturnPart(
-                            tool_name=call.tool_name,
-                            tool_call_id=call.tool_call_id,
-                            content=output
-                        ))
-                    else:
-                        tool_results.append(ToolReturnPart(
-                            tool_name=call.tool_name,
-                            tool_call_id=call.tool_call_id,
-                            content={"error": "Tool not found"}
-                        ))
+        logger.debug(f"Request classified as {classification.type} with confidence {classification.confidence}")
 
-            return self.mcp_agent_tool_response(agent_id, tool_results)
-        else:
-            return result
+        # If confident it's a home automation request, use the home automation agent
+        if classification.type == "home_automation" and classification.confidence > 0.7:
+            response = self._process_home_automation(prompt)
+            
+            return response if response else ""
 
-    def mcp_agent_tool_response(self, agent_id: str, tool_results: List[ToolReturnPart]) -> ModelResponse:
-        print("Tool Results")
-        for tool_result in tool_results:
-            print("    ", type(tool_result), tool_result)
-        assert False, "API not implemented, tool handling should be handled by the agent"
+        # Fall back to conversational response
+        return self._process_conversational(prompt)
+
+
+    def _classify_request(self, text: str) -> RequestType:
+        try:
+            result = self.classifier_agent.run_sync(text, deps=self._deps)
+            return result.data
+        except Exception as e:
+            logger.warning(f"Local classifier failed: {e}, defaulting to conversation")
+            # print stack trace
+            import traceback
+            traceback.print_exc()
+            return RequestType(
+                type="conversation",
+                confidence=0.0
+            )
+
+    def _process_home_automation(self, text: str) -> str | None:
+        logger.debug("Processing home automation request...")
+        try:
+            result = self.home_agent.run_sync(text, deps=self._deps)
+            
+            message = HomeAutomationResponseStruct.extract_message(result.data)
+            return message
+        except Exception as e:
+            logger.debug(f"Home automation processing failed: {e}")
+            
+        return None
+
+    def _process_conversational(self, text: str) -> str:
+        logger.debug("Processing conversational request...")
+        result = self.conversational_agent.run_sync(text, deps=self._deps)
+        return result.data.text

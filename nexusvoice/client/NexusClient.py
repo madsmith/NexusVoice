@@ -1,5 +1,5 @@
 from typing import Optional
-from nexusvoice.ai.pydantic_agent import ModelResponse, PydanticAgentAPI
+from nexusvoice.ai.pydantic_agent import PydanticAgentAPI
 
 import queue
 import threading
@@ -21,7 +21,6 @@ from nexusvoice.ai.TTSInferenceEngine import TTSInferenceEngine
 from nexusvoice.audio.utils import AudioBuffer, save_recording
 from nexusvoice.audio.AudioDevice import AudioDevice
 from nexusvoice.core.api import NexusAPI
-from nexusvoice.core.api.local import NexusAPILocal
 from nexusvoice.core.api.online import NexusAPIOnline
 from nexusvoice.protocol.mcp import UserMessage
 
@@ -304,11 +303,11 @@ class NexusVoiceClient(threading.Thread):
 
     def _do_text_inference(self, text):
         # Use PydanticAgent for conversation/reasoning
-        response: ModelResponse = self.get_api().mcp_agent_inference(self.client_id, UserMessage(text=text))
+        response = self.get_api().prompt_agent(self.client_id, text)
 
-        logger.info(f"Response: {response.text}")
+        logger.info(f"Response: {response}")
         
-        spoken_response = response.text
+        spoken_response = response
         if not spoken_response:
             spoken_response = self.config.get(
                 "nexus.client.no_response_error",
@@ -506,7 +505,9 @@ class NexusVoiceClient(threading.Thread):
 class NexusVoiceStandalone(NexusVoiceClient):
     def __init__(self, client_id: str, config: NexusConfig):
         super().__init__(client_id, config)
-        self._api = NexusAPILocal(config)
+        # TODO: Create a new variant of the API based on the config
+        self._api = NexusAPIOnline(config)
+        self._api.initialize()
 
     def _get_thread_name(self, client_id: str = ""):
         return f"NexusVoiceStandalone::{client_id}"
@@ -515,6 +516,7 @@ class NexusVoiceOnline(NexusVoiceClient):
     def __init__(self, client_id: str, config: NexusConfig):
         super().__init__(client_id, config)
         self._api = NexusAPIOnline(config)
+        self._api.initialize()
 
     def _get_thread_name(self, client_id: str = ""):
         return f"NexusVoiceOnline::{client_id}"

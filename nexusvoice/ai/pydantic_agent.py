@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Generic, List, Optional, TypeVar, Union
 from typing_extensions import ParamSpec
+from nexusvoice.ai.ConversationalAgent import ConversationalAgentFactory
 from nexusvoice.ai.HomeAutomationAgent import HomeAutomationAgentFactory
 from nexusvoice.ai.LocalClassifierAgent import LocalClassifierAgentFactory
 from nexusvoice.core.config import NexusConfig
@@ -20,7 +21,10 @@ from pathlib import Path
 
 from nexusvoice.core.api.base import ModelResponse
 from nexusvoice.utils.logging import get_logger
-from nexusvoice.ai.types import HomeAutomationResponseStruct, NexusSupportDependencies, RequestType, HomeAutomationResponse, HomeAutomationAction
+from nexusvoice.ai.types import (
+    HomeAutomationResponseStruct, NexusSupportDependencies, RequestType, 
+    HomeAutomationResponse, ConversationResponse
+)
 
 logger = get_logger(__name__)
 
@@ -30,9 +34,6 @@ MODEL_DIR = ROOT_DIR / "nexusvoice" / "models"
 
 
 
-class ConversationResponse(BaseModel):
-    """Response from the conversational agent"""
-    text: str = Field(..., description="The response text")
 
 BaseAgentRunResultType = TypeVar('BaseAgentRunResultType')
 AgentDepsT = TypeVar('AgentDepsT')
@@ -185,7 +186,10 @@ class ConversationalAgent(BaseAgent[ConversationResponse, ToolParamSpec]):
     def __init__(self, support_deps: NexusSupportDependencies):
         super().__init__(support_deps)
 
-        provider = OpenAIProvider(api_key=self.config.get("openai.api_key", ""))
+        provider = OpenAIProvider(
+            api_key=self.config.get("agents.conversational.api_key", ""),
+            base_url=self.config.get("agents.conversational.base_url", None)
+        )
         model = OpenAIModel(
             model_name=self.config.get("agents.conversational.model", "gpt-4-turbo-preview"),
             provider=provider
@@ -231,7 +235,7 @@ class PydanticAgentAPI:
         return self._home_agent
     
     @property
-    def conversational_agent(self) -> ConversationalAgent:
+    def conversational_agent(self) -> Agent[NexusSupportDependencies, ConversationResponse]:
         assert self._conversational_agent is not None, "Conversational agent not initialized"
         return self._conversational_agent
     
@@ -241,7 +245,7 @@ class PydanticAgentAPI:
 
         self._classifier_agent = LocalClassifierAgentFactory.create(support_deps)
         self._home_agent = HomeAutomationAgentFactory.create(support_deps)
-        self._conversational_agent = ConversationalAgent(support_deps)
+        self._conversational_agent = ConversationalAgentFactory.create(support_deps)
     
     def initialize(self):
         self.initialize_agents()
@@ -291,20 +295,15 @@ class PydanticAgentAPI:
         try:
             deps = NexusSupportDependencies(config=self.config)
             result = self.home_agent.run_sync(text, deps=deps)
-            if isinstance(result.data, HomeAutomationAction):
-                tool_calls: List[ModelResponsePart] = [ToolCallPart(
-                    tool_name="home_control",
-                    args=result.data.model_dump()
-                )]
-                return ModelResponse(parts=tool_calls)
-            elif isinstance(result.data, HomeAutomationResponse):
-                message = result.data.summary_message if isinstance(result.data, HomeAutomationResponseStruct) else result.data
-                return ModelResponse(parts=[TextPart(content=message)])
+            
+            message = result.data.summary_message if isinstance(result.data, HomeAutomationResponseStruct) else result.data
+            return ModelResponse(parts=[TextPart(content=message)])
         except Exception as e:
             logger.debug(f"Home automation processing failed: {e}")
         return ModelResponse(parts=[])
 
     def _process_conversational(self, text: str) -> ModelResponse:
         logger.debug("Processing conversational request...")
-        result = self.conversational_agent.run_sync(text)
+        deps = NexusSupportDependencies(config=self.config)
+        result = self.conversational_agent.run_sync(text, deps=deps)
         return ModelResponse(parts=[TextPart(content=result.data.text)])

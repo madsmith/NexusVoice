@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from nexusvoice.core.config import NexusConfig
 from pydantic_ai.messages import ModelResponse as PydanticModelResponse
 
 class ModelResponse(PydanticModelResponse):
@@ -9,25 +10,24 @@ class ModelResponse(PydanticModelResponse):
 class NexusAPI(ABC):
     """A class to interact with the Nexus API."""
     
-    def __init__(self):
-        pass
+    def __init__(self, config: NexusConfig):
+        self._config = config
+
+    @property
+    def config(self) -> NexusConfig:
+        return self._config
 
     @abstractmethod
-    def agent_inference(self, agent_id: str, inputs) -> str:
+    def initialize(self):
+        pass
+    
+    @abstractmethod
+    def prompt_agent(self, agent_id: str, prompt: str) -> str:
         """
-        Perform inference using the specified agent.
+        Prompt the specified agent with the given prompt.
+
         :param agent_id: The ID of the agent to use for inference.
-        :param inputs: The inputs to the agent.
+        :param prompt: The prompt to send to the agent.
         :return: The output of the agent.
-        """
-        pass
-
-    @abstractmethod
-    def mcp_agent_inference(self, agent_id: str, inputs) -> ModelResponse:
-        """
-        Perform inference using the specified agent with the MCP Protocol.
-        :param agent_id: The ID of the agent to use for inference.
-        :param inputs: The input message in MCP format.
-        :return: The output message in MCP format.
         """
         pass

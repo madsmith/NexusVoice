@@ -12,12 +12,7 @@ class NexusSupportDependencies:
 class RequestType(BaseModel):
     """The type of request being made"""
     type: str = Field(description="The type of request")
-    confidence: float = Field(description="Confidence score for the classification")
-
-class HomeAutomationAction(BaseModel):
-    intent: str = Field(..., description="The action to perform (e.g., turn_on, turn_off, raise, lower)")
-    device: str = Field(..., description="The device to control (e.g., light, fan, shade)")
-    room: str = Field(..., description="The room where the device is located")
+    confidence: float = Field(description="Confidence score for the classification")\
 
 class HomeAutomationResponseStruct(BaseModel):
     """Response from the home automation agent"""
@@ -30,3 +25,7 @@ class HomeAutomationResponseStruct(BaseModel):
         return response.summary_message
 
 HomeAutomationResponse = Union[HomeAutomationResponseStruct, str]
+
+class ConversationResponse(BaseModel):
+    """Response from the conversational agent"""
+    text: str = Field(..., description="The response text")
