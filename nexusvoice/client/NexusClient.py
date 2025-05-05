@@ -18,6 +18,7 @@ from nexusvoice.ai.AudioInferenceEngine import AudioInferenceEngine
 from nexusvoice.ai.TTSInferenceEngine import TTSInferenceEngine
 from nexusvoice.audio.utils import AudioBuffer, save_recording
 from nexusvoice.audio.AudioDevice import AudioDevice
+from nexusvoice.client.RecordingState import RecordingState
 from nexusvoice.core.api import NexusAPI
 from nexusvoice.core.api.online import NexusAPIOnline
 
@@ -98,15 +99,14 @@ class NexusVoiceClient(threading.Thread):
         assert self._tts_engine is not None, f"{self.__class__.__name__} not initialized, tts engine not available"
         return self._tts_engine
 
-    def _get_thread_name(self, client_id: str = "") -> str:
-        return f"NexusVoiceClient::{client_id}"
-    
-    def get_api(self):
-        if self._api is None:
-            logger.error("API not initialized")
-            raise RuntimeError("API not initialized")
+    @property
+    def api(self) -> NexusAPI:
+        assert self._api is not None, f"{self.__class__.__name__} not initialized, api not available"
         return self._api
     
+    def _get_thread_name(self, client_id: str = "") -> str:
+        return f"NexusVoiceClient::{client_id}"
+
     def initialize(self):
         self._initialize_wake_word_model()
         self._initialize_VAD_model()
@@ -287,7 +287,7 @@ class NexusVoiceClient(threading.Thread):
 
     def _do_text_inference(self, text):
         # Use PydanticAgent for conversation/reasoning
-        response = self.get_api().prompt_agent(self.client_id, text)
+        response = self.api.prompt_agent(self.client_id, text)
 
         logger.info(f"Response: {response}")
         
@@ -504,36 +504,3 @@ class NexusVoiceOnline(NexusVoiceClient):
 
     def _get_thread_name(self, client_id: str = ""):
         return f"NexusVoiceOnline::{client_id}"
-
-class RecordingState:
-    STOPPED = 0
-    RECORDING = 1
-    PENDING = 2
-
-    def __init__(self):
-        self.state = RecordingState.STOPPED
-        self._lock = threading.Lock()
-
-    def is_recording(self):
-        with self._lock:
-            return self.state != RecordingState.STOPPED
-
-    def is_confirmed(self):
-        with self._lock:
-            return self.state == RecordingState.RECORDING
-
-    def start(self):
-        with self._lock:
-            self.state = RecordingState.PENDING
-
-    def stop(self):
-        with self._lock:
-            self.state = RecordingState.STOPPED
-
-    def confirm(self):
-        with self._lock:
-            self.state = RecordingState.RECORDING
-
-    def __str__(self):
-        labels = {RecordingState.STOPPED: "STOPPED", RecordingState.RECORDING: "RECORDING", RecordingState.PENDING: "PENDING"}
-        return labels[self.state]

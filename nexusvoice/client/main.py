@@ -1,20 +1,23 @@
 import logging
-from nexusvoice.core.config import load_config
+import argparse
+from nexusvoice.utils.debug import reset_logging
 from omegaconf import OmegaConf
 
 from nexusvoice.utils.logging import get_logger
 logger = get_logger(__name__)
-from nexusvoice.client import NexusVoiceClient
+
+from nexusvoice.client.NexusClient import NexusVoiceClient, NexusVoiceOnline
+from nexusvoice.core.config import load_config
 
 def main():
     client = None
     try:
-        from nexusvoice.utils.logging import StackTraceFormatter
-        # logging.basicConfig(level=logging.DEBUG, format="%(message)s")
-        log_format = "[%(asctime)s] [%(levelname)s] - %(name)s %(message)s"
-        log_format = "[{levelname}]\t{threadName}\t{message}"
+        parser = argparse.ArgumentParser(description="NexusVoice Online Client")
+        parser.add_argument('-c', '--cmd', nargs=argparse.REMAINDER, help='Send a command prompt to the client')
+        args = parser.parse_args()
+
+        log_format = "[{levelname}]\t{threadName}\t{name}\t{message}"
         log_level = logging.DEBUG
-        # log_level = LOG_TRACE_LEVEL
         handler = logging.StreamHandler()
         handler.setFormatter(logging.Formatter(log_format, style="{"))
         logging.basicConfig(level=log_level, style="{", format=log_format, handlers=[handler])
@@ -22,9 +25,16 @@ def main():
         logger.debug("Loading config")
         config = load_config()
 
+        reset_logging(config.get("logging.suppress"))
+ 
         logger.debug("Creating NexusVoiceClient")
-        client = NexusVoiceClient("test", config)
+        client = NexusVoiceOnline("test", config)
         client.start()
+
+        if args.cmd:
+            prompt = " ".join(args.cmd).strip()
+            if prompt:
+                client.add_command(NexusVoiceClient.CommandProcessText(prompt))
 
         client.join()
     except KeyboardInterrupt:
@@ -32,6 +42,7 @@ def main():
             client.stop()
     except Exception as e:
         logger.error(e)
+
 
 if __name__ == "__main__":
     main()
