@@ -2,7 +2,7 @@ from typing import Optional
 from pydantic_ai.agent import Agent
 from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.models.openai import OpenAIModel
-from nexusvoice.ai.types import NexusSupportDependencies, HomeAutomationResponse
+from nexusvoice.ai.types import HomeAutomationResponseStruct, NexusSupportDependencies, HomeAutomationResponse
 
 class HomeAutomationAgentFactory:
     @classmethod
@@ -12,11 +12,11 @@ class HomeAutomationAgentFactory:
         """
         config = support_deps.config
         provider = OpenAIProvider(
-            api_key=config.get("openai.api_key", ""),
-            base_url=config.get("openai.base_url", None)
+            api_key=config.get("agents.home_automation.api_key", ""),
+            base_url=config.get("agents.home_automation.base_url", None)
         )
         model = OpenAIModel(
-            model_name=config.get('agents.home_automation.model', 'gpt-4-turbo-preview'),
+            model_name=config.get('agents.home_automation.model', 'llama-3.2-3b-instruct'),
             provider=provider
         )
         system_prompt = config.get(
@@ -26,9 +26,10 @@ class HomeAutomationAgentFactory:
             "When asked to perform a task, respond with a structured command. "
             "For informational queries, provide clear, concise responses suitable for audio playback."
         )
-        return Agent[NexusSupportDependencies, HomeAutomationResponse](
+        return Agent[NexusSupportDependencies, HomeAutomationResponseStruct](
             model,
             system_prompt=system_prompt,
+            retries=config.get("agents.home_automation.retries", 1),
             deps_type=NexusSupportDependencies,
-            result_type=HomeAutomationResponse # type: ignore[arg-type]
+            result_type=HomeAutomationResponseStruct # type: ignore[arg-type]
         )
