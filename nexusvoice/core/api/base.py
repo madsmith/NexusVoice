@@ -18,11 +18,11 @@ class NexusAPI(ABC):
         return self._config
 
     @abstractmethod
-    def initialize(self):
+    async def initialize(self):
         pass
     
     @abstractmethod
-    def prompt_agent(self, agent_id: str, prompt: str) -> str:
+    async def prompt_agent(self, agent_id: str, prompt: str) -> str:
         """
         Prompt the specified agent with the given prompt.
 

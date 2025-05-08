@@ -48,7 +48,7 @@ class NexusAPIOnline(NexusAPI):
         self._home_agent = None
         self._conversational_agent = None
 
-    def initialize(self):
+    async def initialize(self):
         logger.debug("Initializing agents...")
         self._deps = NexusSupportDependencies(config=self.config)
 
@@ -75,26 +75,26 @@ class NexusAPIOnline(NexusAPI):
         assert self._conversational_agent is not None, "Conversational agent not initialized"
         return self._conversational_agent
 
-    def prompt_agent(self, agent_id: str, prompt: str) -> str:
+    async def prompt_agent(self, agent_id: str, prompt: str) -> str:
         # First use the classifier to determine request type
         # Try local classifier first
-        classification = self._classify_request(prompt)
+        classification = await self._classify_request(prompt)
 
         logger.debug(f"Request classified as {classification.type} with confidence {classification.confidence}")
 
         # If confident it's a home automation request, use the home automation agent
         if classification.type == "home_automation" and classification.confidence > 0.7:
-            response = self._process_home_automation(prompt)
+            response = await self._process_home_automation(prompt)
             
             return response if response else ""
 
         # Fall back to conversational response
-        return self._process_conversational(prompt)
+        return await self._process_conversational(prompt)
 
 
-    def _classify_request(self, text: str) -> RequestType:
+    async def _classify_request(self, text: str) -> RequestType:
         try:
-            result = self.classifier_agent.run_sync(text, deps=self._deps)
+            result = await self.classifier_agent.run(text, deps=self._deps)
             return result.data
         except Exception as e:
             logger.warning(f"Local classifier failed: {e}, defaulting to conversation")
@@ -106,10 +106,10 @@ class NexusAPIOnline(NexusAPI):
                 confidence=0.0
             )
 
-    def _process_home_automation(self, text: str) -> str | None:
+    async def _process_home_automation(self, text: str) -> str | None:
         logger.debug("Processing home automation request...")
         try:
-            result = self.home_agent.run_sync(text, deps=self._deps)
+            result = await self.home_agent.run(text, deps=self._deps)
             
             message = HomeAutomationResponseStruct.extract_message(result.data)
             return message
@@ -118,7 +118,7 @@ class NexusAPIOnline(NexusAPI):
             
         return None
 
-    def _process_conversational(self, text: str) -> str:
+    async def _process_conversational(self, text: str) -> str:
         logger.debug("Processing conversational request...")
-        result = self.conversational_agent.run_sync(text, deps=self._deps)
+        result = await self.conversational_agent.run(text, deps=self._deps)
         return result.data.text

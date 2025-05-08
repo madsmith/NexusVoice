@@ -1,9 +1,7 @@
+import asyncio
 from typing import Optional
 
-import queue
-import threading
 import logging
-from nexusvoice.core.config import NexusConfig
 import numpy as np
 from openwakeword.model import Model as OpenWakeWordModel
 from pathlib import Path
@@ -16,12 +14,15 @@ import torchaudio
 
 from nexusvoice.ai.AudioInferenceEngine import AudioInferenceEngine
 from nexusvoice.ai.TTSInferenceEngine import TTSInferenceEngine
-from nexusvoice.audio.utils import AudioBuffer, save_recording
+from nexusvoice.audio.utils import AudioBuffer, save_recording, save_recording_async
 from nexusvoice.audio.AudioDevice import AudioDevice
 from nexusvoice.client.RecordingState import RecordingState
 from nexusvoice.core.api import NexusAPI
 from nexusvoice.core.api.online import NexusAPIOnline
+from nexusvoice.core.config import NexusConfig
+from nexusvoice.utils.logging import get_logger
 
+logger = get_logger(__name__)
 
 AUDIO_FORMAT = pyaudio.paInt16
 NUMPY_AUDIO_FORMAT = np.int16
@@ -41,14 +42,10 @@ VAD_ACTIVATION_THRESHOLD = 0.5
 INFERENCE_FRAMEWORK = "onnx"
 ACTIVATION_THRESHOLD = 0.5
 
-
-from nexusvoice.utils.logging import get_logger
-logger = get_logger(__name__)
-
-class NexusVoiceClient(threading.Thread):
+class NexusVoiceClient:
     def __init__(self, client_id: str, config: NexusConfig):
-        thread_name = self._get_thread_name(client_id)
-        super().__init__(daemon=True, name=thread_name)
+        self.name = f"NexusVoiceClient::{client_id}"
+        self.daemon = True
 
         self.client_id = client_id
         self.config = config
@@ -56,14 +53,13 @@ class NexusVoiceClient(threading.Thread):
         self._api: Optional[NexusAPI] = None
 
         self._audio_device: Optional[AudioDevice] = None
-        self.command_processor: Optional[threading.Thread] = None
 
         self._wake_word_model: Optional[OpenWakeWordModel] = None
         self._vad_model: Optional[OnnxWrapper] = None
         self._whisper_engine: Optional[AudioInferenceEngine] = None   
         self._tts_engine: Optional[TTSInferenceEngine] = None
         
-        self._command_queue = queue.Queue()
+        self._command_queue = asyncio.Queue()
 
         self._wake_word_buffer: AudioBuffer = AudioBuffer(format=AUDIO_FORMAT)
         self._vad_buffer: AudioBuffer = AudioBuffer(format=AUDIO_FORMAT)
@@ -103,25 +99,20 @@ class NexusVoiceClient(threading.Thread):
     def api(self) -> NexusAPI:
         assert self._api is not None, f"{self.__class__.__name__} not initialized, api not available"
         return self._api
-    
-    def _get_thread_name(self, client_id: str = "") -> str:
-        return f"NexusVoiceClient::{client_id}"
 
-    def initialize(self):
-        self._initialize_api()
+    async def initialize(self):
+        await self._initialize_api()
         self._initialize_wake_word_model()
         self._initialize_VAD_model()
         self._initialize_whisper_model()
         self._initialize_TTS_model()
 
-        self._initialize_threads()
-
         self._initialize_audio_device()
 
-    def _initialize_api(self):
+    async def _initialize_api(self):
         logger.info("Initializing API")
         self._api = NexusAPIOnline(self.config)
-        self._api.initialize()
+        await self._api.initialize()
 
     def _initialize_audio_device(self):
         logger.info("Initializing audio device")
@@ -167,26 +158,20 @@ class NexusVoiceClient(threading.Thread):
         voice = self.config.tts.get("voice", None)
         self._tts_engine = TTSInferenceEngine(voices=voice)
         self._tts_engine.initialize()
-
-    def _initialize_threads(self):
-        logger.info("Initializing threads")
-
-        thread_name = f"{self.name}::CommandProcessor"
-        self.command_processor = threading.Thread(
-            name=thread_name,
-            target=self.process_commands,
-            daemon=True)
         
-    def run(self):
+    async def run(self):
         logger.info(f"Starting {self.__class__.__name__} {self.client_id}")
 
-        self.initialize()
+        await self.initialize()
 
         self.running = True
 
-        assert self.command_processor is not None, "Command processor not initialized"
-        self.command_processor.start()
+        command_processor_task = asyncio.create_task(self.process_commands())
+        audio_processing_task = asyncio.create_task(self.process_audio())
 
+        await asyncio.gather(command_processor_task, audio_processing_task)
+
+    async def process_audio(self):
         logger.info("Listening for audio")
         while self.running:
             try:
@@ -196,6 +181,7 @@ class NexusVoiceClient(threading.Thread):
                 # Determine how much audio is needed to fill one of the buffers
                 read_chunk_size = min(wake_word_needed, vad_needed)
 
+                # TODO: async api on audio device
                 audio_bytes = self.audio_device.read(read_chunk_size)
 
                 self._wake_word_buffer.append(audio_bytes)
@@ -204,43 +190,56 @@ class NexusVoiceClient(threading.Thread):
                 self._process_vad()
                 self._process_wake_word()
 
+                # TODO: Can we get to the point where this is no longer necessary?
+                await asyncio.sleep(0)
+
+            except asyncio.CancelledError:
+                break
             except KeyboardInterrupt:
                 break
             except Exception as e:
-                logger.error(f"Error in {self.getName()}: {e}")
+                logger.error(f"Error in {self.name}: {e}")
                 if logger.isEnabledFor(logging.DEBUG):
                     # Show the traceback
                     import traceback
                     logger.error(traceback.format_exc())
 
-        self.stop()
+        await self.stop()
 
-    def process_commands(self):
+    async def process_commands(self):
         """ Process commands from the command queue """
-        while self.running:
-            try:
-                command = self._command_queue.get(timeout=1)
-                logger.debug(f"Processing command {command}")
-                if isinstance(command, NexusVoiceClient.CommandShutdown):
+        async with asyncio.TaskGroup() as tg:
+            while self.running:
+                try:
+                    command = await self._command_queue.get()
+                    tg.create_task(self._process_command(command))
+                except asyncio.CancelledError:
                     logger.info("Shutting down {self.getName()}")
-                    self.stop()
                     break
-                elif isinstance(command, NexusVoiceClient.CommandWakeWord):
-                    self._process_command_wake_word(command)
-                elif isinstance(command, NexusVoiceClient.CommandProcessAudio):
-                    self._process_command_process_audio(command)
-                elif isinstance(command, NexusVoiceClient.CommandProcessText):
-                    self._process_command_process_text(command)
-            except queue.Empty:
-                # No command to process
-                pass
-            except Exception as e:
-                logger.error(f"Error processing command: {e}")
-                # Show the traceback
-                import traceback
-                logger.error(traceback.format_exc())
+                except KeyboardInterrupt:
+                    logger.info("Shutting down {self.getName()}")
+                    break
+                except Exception as e:
+                    logger.error(f"Error processing command: {e}")
+                    # Show the traceback
+                    import traceback
+                    logger.error(traceback.format_exc())
+        
+        await self.stop()
+    
+    async def _process_command(self, command):
+        logger.debug(f"Processing command {command}")
+        if isinstance(command, NexusVoiceClient.CommandShutdown):
+            logger.info("Shutting down {self.getName()}")
+            await self.stop()
+        elif isinstance(command, NexusVoiceClient.CommandWakeWord):
+            await self._process_command_wake_word(command)
+        elif isinstance(command, NexusVoiceClient.CommandProcessAudio):
+            await self._process_command_process_audio(command)
+        elif isinstance(command, NexusVoiceClient.CommandProcessText):
+            await self._process_command_process_text(command)
 
-    def _process_command_wake_word(self, command):
+    async def _process_command_wake_word(self, command):
         logger.debug(f"Received wake word command {command.wake_word}")
         if not self._confirm_wake_word(command):
             logger.debug(f"Wake word {command.wake_word} not confirmed")
@@ -266,14 +265,17 @@ class NexusVoiceClient(threading.Thread):
         audio_int16 = (audio_clamped * max_int16).to(torch.int16)
         return audio_int16.numpy().tobytes()
         
-    def _process_command_process_audio(self, command):
+    async def _process_command_process_audio(self, command):
         if getattr(self, 'save_recordings', False):
-            # Create the recordings directory if it doesn't exist
-            Path("recordings").mkdir(parents=True, exist_ok=True)
-
             filename = Path("recordings", f"recording_{self.client_id}_{int(time.time())}_audio.wav")
-            save_recording(command.audio_bytes, filename)
-            logger.info(f"Saved recording to {filename}")
+            task = asyncio.create_task(save_recording_async(command.audio_bytes, filename))
+            def on_task_done(task):
+                try:
+                    task.result()
+                    logger.info(f"Saved recording to {filename}")
+                except Exception as e:
+                    logger.error(f"Error saving recording: {e}")
+            task.add_done_callback(on_task_done)
 
         # Convert audio bytes into numpy array
         np_audio = np.frombuffer(command.audio_bytes, dtype=NUMPY_AUDIO_FORMAT)
@@ -284,16 +286,16 @@ class NexusVoiceClient(threading.Thread):
 
         logger.info(f"Transcription: {transcription}")
 
-        self._do_text_inference(transcription)
+        await self._do_text_inference(transcription)
 
-    def _process_command_process_text(self, command):
+    async def _process_command_process_text(self, command):
         text = command.text
 
-        self._do_text_inference(text)
+        await self._do_text_inference(text)
 
-    def _do_text_inference(self, text):
+    async def _do_text_inference(self, text):
         # Use PydanticAgent for conversation/reasoning
-        response = self.api.prompt_agent(self.client_id, text)
+        response = await self.api.prompt_agent(self.client_id, text)
 
         logger.info(f"Response: {response}")
         
@@ -390,13 +392,16 @@ class NexusVoiceClient(threading.Thread):
         transcription = self.whisper_engine.infer(np_audio, sampling_rate=AUDIO_SAMPLE_RATE)
 
         if getattr(self, 'save_recordings', False):
-            # Create the recordings directory if it doesn't exist
-            Path("recordings").mkdir(parents=True, exist_ok=True)
-            
             # Save the recording to a file
             filename = Path("recordings", f"recording_{self.client_id}_{int(time.time())}_wakeword.wav")
-            save_recording(command.audio_bytes, filename)
-            logger.info(f"Saved recording to {filename}")
+            task = asyncio.create_task(save_recording_async(command.audio_bytes, filename))
+            def on_task_done(task):
+                try:
+                    task.result()
+                    logger.info(f"Saved recording to {filename}")
+                except Exception as e:
+                    logger.error(f"Error saving recording: {e}")
+            task.add_done_callback(on_task_done)
 
         transcription = transcription.strip()
 
@@ -451,9 +456,9 @@ class NexusVoiceClient(threading.Thread):
             
             self.add_command(NexusVoiceClient.CommandProcessAudio(audio_data))
 
-    def stop(self):
+    async def stop(self):
         if self.running:
-            logger.info(f"Stopping {self.getName()}")
+            logger.info(f"Stopping {self.name}")
             self.running = False
             
             if self._recording_state.is_recording():
@@ -464,7 +469,7 @@ class NexusVoiceClient(threading.Thread):
 
     def add_command(self, command):
         logger.debug(f"Adding command {command}")
-        self._command_queue.put(command)
+        self._command_queue.put_nowait(command)
 
     class Command:
         def __init__(self):
@@ -491,4 +496,3 @@ class NexusVoiceClient(threading.Thread):
     class CommandProcessText(Command):
         def __init__(self, text):
             self.text = text
-

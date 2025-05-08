@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import argparse
 from nexusvoice.utils.debug import reset_logging
@@ -9,7 +10,7 @@ logger = get_logger(__name__)
 from nexusvoice.client.NexusClient import NexusVoiceClient
 from nexusvoice.core.config import load_config
 
-def main():
+async def run_client():
     client = None
     try:
         parser = argparse.ArgumentParser(description="NexusVoice Online Client")
@@ -29,20 +30,25 @@ def main():
  
         logger.debug("Creating NexusVoiceClient")
         client = NexusVoiceClient("local", config)
-        client.start()
+        # In the future, NexusVoiceClient should support async start/stop
+        client_running = client.run()
 
         if args.cmd:
             prompt = " ".join(args.cmd).strip()
             if prompt:
                 client.add_command(NexusVoiceClient.CommandProcessText(prompt))
 
-        client.join()
+        await client_running
     except KeyboardInterrupt:
         if client:
-            client.stop()
+            await client.stop()
     except Exception as e:
         logger.error(e)
+        import traceback
+        traceback.print_exc()
 
+def main():
+    asyncio.run(run_client())
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(run_client())
