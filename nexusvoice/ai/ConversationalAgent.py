@@ -19,7 +19,7 @@ class ConversationalAgentFactory:
             provider=provider
         )
         system_prompt = config.get(
-            "agent.conversational.system_prompt",
+            "agents.conversational.system_prompt",
             "You are a helpful assistant. Provide clear and concise responses "
             "that are suitable for audio playback. Keep responses brief and natural."
         )
