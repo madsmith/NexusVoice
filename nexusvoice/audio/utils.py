@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import asyncio
 import logging
 from pathlib import Path
 from typing import Optional
@@ -126,6 +127,9 @@ class AudioRingBuffer(AudioBufferBase):
     def clear(self) -> None:
         self.buffer.clear()
 
+async def save_recording_async(recording, filename):
+    await asyncio.to_thread(save_recording, recording, filename)
+
 def save_recording(recording, filename):
     if isinstance(filename, str):
         filename = Path(filename)
@@ -152,6 +156,9 @@ def save_recording(recording, filename):
         wave_file.setsampwidth(sample_width)
         wave_file.setframerate(sample_rate)
         wave_file.writeframes(frames)
+
+async def save_recording_mp3_async(recording, filename):
+    await asyncio.to_thread(save_recording_mp3, recording, filename)
 
 def save_recording_mp3(recording, filename):
     if isinstance(filename, str):
