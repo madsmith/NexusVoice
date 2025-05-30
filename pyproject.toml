@@ -15,7 +15,7 @@ dependencies = [
     "omegaconf>=2.3",
     "pydub~=0.25",
     "pydantic>=2.11.2",
-    "pydantic-ai>=0.0.55",
+    "pydantic-ai>=0.2.11",
     "requests>=2.32.3",
     "setuptools",
     "silero==0.4.1",

@@ -10,7 +10,7 @@ openwakeword==0.6.0
 omegaconf>=2.3
 pydub~=0.25
 pydantic>=2.11.2
-pydantic-ai>=0.0.55
+pydantic-ai>=0.2.11
 pytest>=8.3.0
 requests>=2.32.3
 scikit-learn>=1.4.0
