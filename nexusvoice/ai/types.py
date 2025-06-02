@@ -1,13 +1,15 @@
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Union
 from pydantic import BaseModel, Field
 
 from nexusvoice.core.config import NexusConfig
+from pydantic_ai.mcp import MCPServer
 
 @dataclass
 class NexusSupportDependencies:
     config: NexusConfig
+    servers: list[MCPServer] = field(default_factory=list)
 
 class RequestType(BaseModel):
     """The type of request being made"""

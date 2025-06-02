@@ -8,7 +8,7 @@ build/
 dist/
 
 # Runtime Config
-config.yml
+config_private.yml
 
 # Runtime artifacts
 __pycache__

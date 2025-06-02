@@ -42,5 +42,8 @@ dev = [
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
+[tool.pytest.ini_options]
+asyncio_default_fixture_loop_scope = "function"
+
 [tool.setuptools]
 packages = { find = { include = ["nexusvoice*"] } }

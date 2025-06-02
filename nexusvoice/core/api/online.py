@@ -1,3 +1,4 @@
+import shlex
 from pydantic_ai import Agent, RunContext
 
 from nexusvoice.ai.ConversationalAgent import ConversationalAgentFactory
@@ -13,6 +14,7 @@ from nexusvoice.ai.types import (
 from nexusvoice.core.api import NexusAPI
 from nexusvoice.core.config import NexusConfig
 from nexusvoice.utils.logging import get_logger
+from pydantic_ai.mcp import MCPServerStdio
 
 logger = get_logger(__name__)
 
@@ -44,13 +46,21 @@ class NexusAPIOnline(NexusAPI):
     def __init__(self, config: NexusConfig):
         super().__init__(config)
 
+        self._mcp_servers = {}
+
         self._classifier_agent = None
         self._home_agent = None
         self._conversational_agent = None
 
+
     async def initialize(self):
         logger.debug("Initializing agents...")
         self._deps = NexusSupportDependencies(config=self.config)
+
+        # Initialize MCP servers
+        await self._initialize_mcp_servers()
+
+        self._deps.servers = list(self._mcp_servers.values())
 
         self._classifier_agent = LocalClassifierAgentFactory.create(self._deps)
         self._home_agent = HomeAutomationAgentFactory.create(self._deps)
@@ -60,6 +70,47 @@ class NexusAPIOnline(NexusAPI):
         self._home_agent.tool(home_control)
         self._conversational_agent.tool(get_weather)
 
+
+    async def _initialize_mcp_servers(self):
+        logger.debug("Initializing MCP servers...")
+        servers = self.config.get("servers", [])
+        for server in servers:
+            await self._create_mcp_server(server)
+
+    async def _create_mcp_server(self, server: dict):
+        logger.debug(f"Creating MCP server {server['name']}...")
+        
+        if server["transport"] == "stdio":
+            await self._create_stdio_mcp_server(server)
+        else:
+            logger.warning(f"Unknown transport type {server['transport']}")
+
+    async def _create_stdio_mcp_server(self, server: dict):
+        if 'command' not in server:
+            logger.warning("Missing command for stdio server")
+            return
+
+        args = []
+        if 'args' in server:
+            if isinstance(server["args"], list):
+                args = server["args"]
+            else:
+                args = shlex.split(server["args"])
+        
+        prefix = server.get("prefix", "tool")
+        in_use_count = 1
+        while prefix in self._mcp_servers.keys():
+            prefix += f"_{in_use_count}"
+            in_use_count += 1
+        
+        instance = MCPServerStdio(
+            server["command"],
+            args=args,
+            tool_prefix=prefix
+        )
+
+        self._mcp_servers[prefix] = instance
+        
     @property
     def classifier_agent(self) -> Agent[NexusSupportDependencies, RequestType]:
         assert self._classifier_agent is not None, "Classifier agent not initialized"
@@ -95,7 +146,7 @@ class NexusAPIOnline(NexusAPI):
     async def _classify_request(self, text: str) -> RequestType:
         try:
             result = await self.classifier_agent.run(text, deps=self._deps)
-            return result.data
+            return result.output
         except Exception as e:
             logger.warning(f"Local classifier failed: {e}, defaulting to conversation")
             # print stack trace
@@ -111,7 +162,7 @@ class NexusAPIOnline(NexusAPI):
         try:
             result = await self.home_agent.run(text, deps=self._deps)
             
-            message = HomeAutomationResponseStruct.extract_message(result.data)
+            message = HomeAutomationResponseStruct.extract_message(result.output)
             return message
         except Exception as e:
             logger.debug(f"Home automation processing failed: {e}")
@@ -121,4 +172,4 @@ class NexusAPIOnline(NexusAPI):
     async def _process_conversational(self, text: str) -> str:
         logger.debug("Processing conversational request...")
         result = await self.conversational_agent.run(text, deps=self._deps)
-        return result.data.text
+        return result.output.text

@@ -10,6 +10,7 @@ class ConversationalAgentFactory:
         Factory method to create a pydantic_ai.Agent for home automation intents.
         """
         config = support_deps.config
+        servers = support_deps.servers
         provider = OpenAIProvider(
             api_key=config.get("agents.conversational.api_key", ""),
             base_url=config.get("agents.conversational.base_url", None)
@@ -28,5 +29,6 @@ class ConversationalAgentFactory:
             system_prompt=system_prompt,
             retries=config.get("agents.conversational.retries", 1),
             deps_type=NexusSupportDependencies,
-            result_type=ConversationResponse # type: ignore[arg-type]
+            output_type=ConversationResponse,
+            mcp_servers=servers
         )

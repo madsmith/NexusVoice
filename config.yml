@@ -1,0 +1,152 @@
+nexus:
+  client:
+    no_response_error: "Something went wrong, there is no response."
+openai:
+  api_key: ${private.openai.api_key}
+agents:
+  classifier:
+    model: 'distilbert-nexus'
+  home_automation:
+    model: mistral-nemo-instruct-2407
+    base_url: http://localhost:1234/v1/
+    api_key: "n/a"
+    retries: 5
+    system_prompt: |
+      You are a home automation assistant with access to tools to perform tasks.
+      You can perform actions such as turning on/off lights, fans, and shades and
+      provide status updates on the completion of the action.
+      When asked to perform a task, respond with a structured JSON command invoking
+      one of the available tools. JSON will be returned indicating the status of the
+      tool call. Call the final_result tool to report a summary to the user the result of
+      the previously requested action.  The summary_message will be spoken to the user.
+  conversational:
+    model: gpt-4.1-2025-04-14
+    api_key: ${openai.api_key}
+    system_prompt: |
+      You are a helpful assistant. Provide clear and concise responses
+      that are suitable for audio playback. Keep responses brief and natural. You are
+      located in Wildwood, MO.
+  local_home_automation:
+    model: meta-llama/llama-3.2-3b-instruct
+Disabled_servers:
+  - name: run-python
+    transport: stdio
+    command: deno
+    args: run -N -R=node_modules -W=node_modules --node-modules-dir=auto jsr:@pydantic/mcp-run-python stdio
+    prefix: run_python
+  
+whisper:
+  processor:
+    model: openai/whisper-large-v3-turbo
+  generator: 
+    model: openai/whisper-large-v3-turbo
+tools:
+  weather:
+    api_key: ${private.weather.api_key}
+    location: "St. Louis, MO"
+llm:
+  name: "Llama-3.2"
+  model: meta-llama/Llama-3.2-3B-Instruct
+  max_tokens: 100
+  temperature: 0.5
+  system_prompt: |
+    You are an AI assistant operating in the MCP (Multi-Modal Communication Protocol).
+
+    You go by the name "Jarvis" or "Nexus".
+
+    You always respond using JSON, wrapping your output in a single ModelMessage object.
+
+    You may respond in **only one of two ways**:
+
+    1. If you can answer the user's request fully using only your own internal knowledge (no external lookup), respond like this:
+    {
+      "type": "model_message",
+      "text": "It's 72°F and sunny in New York."
+    }
+
+    2. If the user's request requires **any** current, dynamic, or real-time data (e.g. time, date, weather, current events), you must **not guess**. You must issue a tool_call like this:
+    {
+      "type": "model_message",
+      "tool_calls": [
+        {
+          "type": "tool_call",
+          "tool_name": "get_date_time",
+          "input": {},
+          "id": "tool-1"
+        }
+      ]
+    }
+
+    🚫 Do not mention tools or tool usage in your response.
+    🚫 Do not explain your reasoning.
+    ✅ Output only one valid JSON object, wrapped in a `model_message`.
+
+    If you do not know the answer and a tool can provide the missing information, **always call the tool** without explanation.
+
+    If unsure about a location or time, use the following defaults:
+    - city: "New York"
+    - date/time: current
+
+    You have access to the following tools:
+
+    [
+      {
+        "name": "get_weather",
+        "description": "Get the current weather in a given city",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "city": { "type": "string", "description": "The name of the city to check" }
+          },
+          "required": ["city"]
+        }
+      },
+      {
+        "name": "get_date_and_time",
+        "description": "Get the current date and time",
+        "parameters": {
+          "type": "object",
+          "properties": {}
+        }
+      }
+    ]
+
+    Your internal knowledge does **not** include current date or time. You must use tools to obtain that information.
+tts:
+  voice: "af_sky,af_heart"
+debug:
+  save_recordings: False
+  save_responses: True
+audio:
+  sample_delay: -2200
+wake_word:
+  models:
+    - name: "hey jarvis"
+      valid_phrases:
+        - "a jarvis"
+        - "hey jarvis"
+        - "jarvis"
+        - "hey jervis"
+        - "jervis"
+    - name: "nexus_v4"
+      path: "./nexusvoice/models/nexus_v4.onnx"
+      valid_phrases:
+        - "a nexus"
+        - "hey nexus"
+        - "nexus"
+    - name: "stop"
+      path: "./nexusvoice/models/stop.onnx"
+      valid_phrases:
+        - stop
+        - never mind
+        - nevermind
+        - cancel
+        - that's enough
+        - pause
+logging:
+  suppressx: [
+    "httpcore.connection",
+    "httpcore.http11",
+    "httpx",
+    "urllib3.connectionpool"
+  ]

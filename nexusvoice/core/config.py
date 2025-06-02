@@ -73,4 +73,13 @@ class NexusConfig:
 
 def load_config() -> NexusConfig:
     config = OmegaConf.load("config.yml")
+    config_private = OmegaConf.load("config_private.yml")
+    config = OmegaConf.merge(config, config_private)
+
+    # Resolve any relative paths
+    OmegaConf.resolve(config)
+
+    if 'private' in config:
+        del config['private'] # type: ignore
+
     return NexusConfig(config)
