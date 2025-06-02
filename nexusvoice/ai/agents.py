@@ -7,7 +7,7 @@ import random
 import threading
 from typing import List
 
-import omegaconf
+from nexusvoice.core.config import load_config
 
 from nexusvoice.protocol.mcp import MCPMessage, ModelMessage, ToolResult, UserMessage
 from nexusvoice.utils.logging import get_logger
@@ -253,7 +253,7 @@ class AgentManager:
 
 # Example Usage
 if __name__ == "__main__":
-    config = omegaconf.OmegaConf.load("config.yml")
+    config = load_config()
     manager = AgentManager(config, max_agents=3)
 
     # Create a number of agents
