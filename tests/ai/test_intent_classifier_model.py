@@ -23,8 +23,8 @@ def test_intent_classifier_home_automation(setup_agent):
     agent, support_deps = setup_agent
     result = agent.run_sync("Turn on the living room lights", deps=support_deps)
     assert isinstance(result, AgentRunResult)
-    assert isinstance(result.data, RequestType)
-    classification = result.data
+    assert isinstance(result.output, RequestType)
+    classification = result.output
     assert classification.type == "home_automation"
     assert classification.confidence > 0.7
 
@@ -32,8 +32,8 @@ def test_intent_classifier_conversation(setup_agent):
     agent, support_deps = setup_agent
     result = agent.run_sync("What's the weather like today?", deps=support_deps)
     assert isinstance(result, AgentRunResult)
-    assert isinstance(result.data, RequestType)
-    classification = result.data
+    assert isinstance(result.output, RequestType)
+    classification = result.output
     assert classification.type == "conversation"
     assert classification.confidence > 0.5
 
@@ -45,7 +45,7 @@ def test_local_classifier_agent_factory():
     # Optionally, run a simple classification to check integration
     result = agent.run_sync("Turn on the kitchen lights", deps=support_deps)
     assert isinstance(result, AgentRunResult)
-    assert isinstance(result.data, RequestType)
-    classification = result.data
+    assert isinstance(result.output, RequestType)
+    classification = result.output
     assert classification.type == "home_automation"
     assert classification.confidence > 0.7

@@ -32,5 +32,5 @@ class HomeAutomationAgentFactory:
             system_prompt=system_prompt,
             retries=config.get("agents.home_automation.retries", 1),
             deps_type=NexusSupportDependencies,
-            result_type=HomeAutomationResponseStruct # type: ignore[arg-type]
+            output_type=HomeAutomationResponseStruct
         )

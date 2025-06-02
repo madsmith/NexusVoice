@@ -11,6 +11,6 @@ def test_conversational_agent_basic():
     # Test conversation request
     result = agent.run_sync("What's the capital of the Netherlands?", deps=support_deps)
 
-    response = result.data
+    response = result.output
     assert isinstance(response, ConversationResponse)
     assert "Amsterdam" in response.text

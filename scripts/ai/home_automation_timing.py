@@ -123,7 +123,7 @@ def run_timing(num_samples=5, name_filter=None):
             status = "VALID" if valid else "INVALID"
             print(f"[{name}] Sample {i+1}: {duration:.3f}s | {status}")
             print(f"       Args: {call}")
-            print(f"       Response: {getattr(result.data, 'text', result.data)}")
+            print(f"       Response: {getattr(result.output, 'text', result.output)}")
 
         if len(durations) == 0:
             avg = float('nan')

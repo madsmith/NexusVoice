@@ -36,12 +36,12 @@ async def test_local_home_automation_agent_factory(home_control_tool):
     
     print(result)
     assert isinstance(result, AgentRunResult)
-    assert isinstance(result.data, HomeAutomationResponse)
+    assert isinstance(result.output, HomeAutomationResponse)
     assert called['value'], "Home control tool was not called"
     assert "kitchen" in called['args']['room']
     assert "on" in called['args']['intent']
     assert "light" in called['args']['device']
-    summary_message = HomeAutomationResponseStruct.extract_message(result.data)
+    summary_message = HomeAutomationResponseStruct.extract_message(result.output)
     assert "kitchen" in summary_message.lower()
     assert "on" in summary_message.lower()
     
@@ -72,7 +72,7 @@ async def test_local_home_automation_agent_iter_valid(home_control_tool):
         print("== End of Agent Run ==")
     # print(result)
     # assert isinstance(result, AgentRunResult)
-    # assert isinstance(result.data, HomeAutomationResponse)
+    # assert isinstance(result.output, HomeAutomationResponse)
     # assert called['value'], "Home control tool was not called"
 
 
@@ -102,7 +102,7 @@ async def test_local_home_automation_agent_factory_iter_invalid(home_control_too
         print("== End of Agent Run ==")
     # print(result)
     # assert isinstance(result, AgentRunResult)
-    # assert isinstance(result.data, HomeAutomationResponse)
+    # assert isinstance(result.output, HomeAutomationResponse)
     # assert called['value'], "Home control tool was not called"
 
 def test_local_home_automation_agent_factory_invalid_intent(home_control_tool):
@@ -119,6 +119,6 @@ def test_local_home_automation_agent_factory_invalid_intent(home_control_tool):
 
     print(result)
     assert isinstance(result, AgentRunResult)
-    assert isinstance(result.data, HomeAutomationResponse)
+    assert isinstance(result.output, HomeAutomationResponse)
     assert called['value'], "Home control tool was not called"
 

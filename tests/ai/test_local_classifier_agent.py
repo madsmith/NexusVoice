@@ -12,9 +12,9 @@ def test_local_classifier():
     result = agent.run_sync("Turn on the living room lights", deps=support_deps)
 
     assert isinstance(result, AgentRunResult)
-    assert isinstance(result.data, RequestType)
+    assert isinstance(result.output, RequestType)
 
-    classification = result.data
+    classification = result.output
     assert classification.type == "home_automation"
     assert classification.confidence > 0.7
         
@@ -22,8 +22,8 @@ def test_local_classifier():
     result = agent.run_sync("What's the weather like today?", deps=support_deps)
 
     assert isinstance(result, AgentRunResult)
-    assert isinstance(result.data, RequestType)
+    assert isinstance(result.output, RequestType)
 
-    classification = result.data
+    classification = result.output
     assert classification.type == "conversation"
     assert classification.confidence > 0.5

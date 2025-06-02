@@ -12,7 +12,7 @@ from pydantic_ai.agent import Agent
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, BatchEncoding, LlamaForCausalLM, PreTrainedTokenizerBase
 
-from nexusvoice.ai.types import HomeAutomationResponse, NexusSupportDependencies
+from nexusvoice.ai.types import HomeAutomationResponseStruct, HomeAutomationResponse, NexusSupportDependencies
 from nexusvoice.utils.logging import get_logger
 import transformers
 from transformers.models.auto.tokenization_auto import get_tokenizer_config
@@ -64,7 +64,7 @@ class HomeAutomationModel(Model):
         messages: list[ModelMessage],
         model_settings: ModelSettings | None,
         model_request_parameters: ModelRequestParameters
-    ) -> tuple[ModelResponse, Usage]:
+    ) -> ModelResponse:
         # print()
         # self._print_messages(messages)
         # self._print_model_request_parameters(model_request_parameters)
@@ -79,7 +79,7 @@ class HomeAutomationModel(Model):
         # for message in chat_history:
         #     print(f"    {message}")
 
-        all_tools = model_request_parameters.function_tools + model_request_parameters.result_tools
+        all_tools = model_request_parameters.function_tools + model_request_parameters.output_tools
         tools = [self._tool_description(tool) for tool in all_tools]
 
         chat_input = self._tokenizer.apply_chat_template(
@@ -135,9 +135,10 @@ class HomeAutomationModel(Model):
             parts = [TextPart(content=decoded_output)]
         # print("!!! Parts:", parts)
         
-        model_response = ModelResponse(parts=parts)
+        usage = Usage(1, input_tokens, output_tokens, input_tokens + output_tokens)
+        model_response = ModelResponse(parts=parts, usage=usage)
 
-        return model_response, Usage(1, input_tokens, output_tokens, input_tokens + output_tokens)
+        return model_response
 
     @classmethod
     def _tool_description(cls, tool: ToolDefinition) -> dict[str, Any]:
@@ -175,7 +176,7 @@ class HomeAutomationModel(Model):
         output_json: dict[str, Any] | None = pydantic_core.from_json(response, allow_partial='trailing-strings')
 
         if output_json:
-            all_tools = model_request_parameters.function_tools + model_request_parameters.result_tools
+            all_tools = model_request_parameters.function_tools + model_request_parameters.output_tools
             for tool in all_tools:
                 if tool.name != output_json.get('name'):
                     # print("!!! Tool name does not match:", tool.name, output_json.get('name'))
@@ -275,7 +276,7 @@ class HomeAutomationModel(Model):
                 if isinstance(part.args, str):
                     args = part.args
                 else:
-                    if 'parameters' in part.args:
+                    if part.args is not None and 'parameters' in part.args:
                         args = part.args['parameters']
                     else:
                         args = part.args
@@ -337,11 +338,11 @@ class HomeAutomationModel(Model):
         text = "".join(content_parts)
         return text
 
-    def _get_result_tool(self, model_request_parameters: ModelRequestParameters) -> ToolDefinition:
-        for tool in model_request_parameters.result_tools:
+    def _get_output_tool(self, model_request_parameters: ModelRequestParameters) -> ToolDefinition:
+        for tool in model_request_parameters.output_tools:
             if tool.parameters_json_schema['title'] == 'HomeAutomationRequestType':
                 return tool
-        raise ValueError("No result tool found")
+        raise ValueError("No output tool found")
 
     @classmethod
     def _print_messages(cls, messages: list[ModelMessage]):
@@ -371,7 +372,7 @@ class HomeAutomationModel(Model):
         print("Model Request Parameters:")
         for func in model_request_parameters.function_tools:
             print(f"    Tool: {func.name}: {func.description}")
-        for func in model_request_parameters.result_tools:
+        for func in model_request_parameters.output_tools:
             print(f"    Result: {func.name}: {func.description}")
     
     @property
@@ -386,11 +387,11 @@ class LocalHomeAutomationAgentFactory():
     @classmethod
     def create(cls, support_deps: NexusSupportDependencies):
         model = HomeAutomationModel(support_deps.config)
-        agent = Agent[NexusSupportDependencies, HomeAutomationResponse](
+        agent = Agent[NexusSupportDependencies, HomeAutomationResponseStruct](
             model=model,
             system_prompt=cls._get_system_prompt(support_deps.config),
             deps_type=NexusSupportDependencies,
-            result_type=HomeAutomationResponse # type: ignore[arg-type]
+            output_type=HomeAutomationResponseStruct
         )
         return agent
 

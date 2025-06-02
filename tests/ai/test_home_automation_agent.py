@@ -31,7 +31,7 @@ def test_home_automation_basic():
     # Test home automation request
     result = agent.run_sync("Turn on the living room lights", deps=support_deps)
 
-    response = result.data
+    response = result.output
     assert isinstance(response, HomeAutomationResponse)
     summary_message = HomeAutomationResponseStruct.extract_message(response)
     assert "living room" in summary_message.lower()
@@ -50,7 +50,7 @@ def test_home_automation_tool(home_control_tool):
     with TimeThis("test_home_automation_tool"):
         result = agent.run_sync("Turn on the living room lights", deps=support_deps)
 
-    response = result.data
+    response = result.output
     assert isinstance(response, HomeAutomationResponse)
     summary_message = HomeAutomationResponseStruct.extract_message(response)
     assert "living room" in summary_message.lower()
@@ -82,7 +82,7 @@ def test_home_automation_custom_provider(home_control_tool):
     with TimeThis("test_home_automation_custom_provider"):
         result = agent.run_sync("Turn on the living room lights", deps=support_deps)
 
-    response = result.data
+    response = result.output
     assert isinstance(response, HomeAutomationResponse)
     summary_message = HomeAutomationResponseStruct.extract_message(response)
     

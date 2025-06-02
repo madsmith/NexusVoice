@@ -56,7 +56,7 @@ class IntentClassifierModel(Model):
         messages: list[ModelMessage],
         model_settings: ModelSettings | None,
         model_request_parameters: ModelRequestParameters
-    ) -> tuple[ModelResponse, Usage]:
+    ) -> ModelResponse:
 
         text = self._get_user_prompt_text(messages)
 
@@ -94,7 +94,7 @@ class IntentClassifierModel(Model):
             response_tokens=len(self._model_config.label2id)
         )
         
-        return ModelResponse(parts=[part]), usage
+        return ModelResponse(parts=[part], usage=usage)
     
     def _get_user_prompt_text(self, messages: list[ModelMessage]) -> str:
         last_message = messages[-1]
@@ -111,7 +111,7 @@ class IntentClassifierModel(Model):
         return text
     
     def _get_result_tool(self, model_request_parameters: ModelRequestParameters) -> ToolDefinition:
-        for tool in model_request_parameters.result_tools:
+        for tool in model_request_parameters.output_tools:
             if tool.parameters_json_schema['title'] == 'RequestType':
                 return tool
         raise ValueError("No result tool found")
@@ -133,7 +133,7 @@ class LocalClassifierAgentFactory():
         agent = Agent[NexusSupportDependencies, RequestType](
             model=model,
             deps_type=NexusSupportDependencies,
-            result_type=RequestType
+            output_type=RequestType
         )
 
         return agent
