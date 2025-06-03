@@ -3,11 +3,11 @@ from pydantic_ai.agent import Agent
 from pydantic_ai.providers import Provider
 from pydantic_ai.providers.openai import AsyncOpenAI, OpenAIProvider
 from pydantic_ai.models.openai import OpenAIModel
-from nexusvoice.ai.types import HomeAutomationResponseStruct, NexusSupportDependencies, HomeAutomationResponse
+from nexusvoice.ai.types import HomeAutomationResponseStruct, NexusSupportDependencies
 
 class HomeAutomationAgentFactory:
     @classmethod
-    def create(cls, support_deps: NexusSupportDependencies, provider: Optional[Provider[AsyncOpenAI]] = None) -> Agent[NexusSupportDependencies, HomeAutomationResponse]:
+    def create(cls, support_deps: NexusSupportDependencies, provider: Optional[Provider[AsyncOpenAI]] = None) -> Agent[NexusSupportDependencies, HomeAutomationResponseStruct]:
         """
         Factory method to create a pydantic_ai.Agent for home automation intents.
         """

@@ -1,5 +1,5 @@
 from nexusvoice.ai.HomeAutomationAgent import HomeAutomationAgentFactory
-from nexusvoice.ai.types import HomeAutomationResponse, HomeAutomationResponseStruct, NexusSupportDependencies
+from nexusvoice.ai.types import HomeAutomationResponseStruct, NexusSupportDependencies
 from nexusvoice.utils.debug import TimeThis
 from pydantic_ai import RunContext
 from nexusvoice.core.config import load_config
@@ -32,7 +32,7 @@ def test_home_automation_basic():
     result = agent.run_sync("Turn on the living room lights", deps=support_deps)
 
     response = result.output
-    assert isinstance(response, HomeAutomationResponse)
+    assert isinstance(response, HomeAutomationResponseStruct)
     summary_message = HomeAutomationResponseStruct.extract_message(response)
     assert "living room" in summary_message.lower()
     assert "on" in summary_message.lower()
@@ -51,7 +51,7 @@ def test_home_automation_tool(home_control_tool):
         result = agent.run_sync("Turn on the living room lights", deps=support_deps)
 
     response = result.output
-    assert isinstance(response, HomeAutomationResponse)
+    assert isinstance(response, HomeAutomationResponseStruct)
     summary_message = HomeAutomationResponseStruct.extract_message(response)
     assert "living room" in summary_message.lower()
     assert "on" in summary_message.lower()
@@ -83,7 +83,7 @@ def test_home_automation_custom_provider(home_control_tool):
         result = agent.run_sync("Turn on the living room lights", deps=support_deps)
 
     response = result.output
-    assert isinstance(response, HomeAutomationResponse)
+    assert isinstance(response, HomeAutomationResponseStruct)
     summary_message = HomeAutomationResponseStruct.extract_message(response)
     
     assert called["value"], "Home automation tool was not executed"

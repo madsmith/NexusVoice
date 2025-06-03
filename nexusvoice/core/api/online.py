@@ -6,7 +6,6 @@ from nexusvoice.ai.HomeAutomationAgent import HomeAutomationAgentFactory
 from nexusvoice.ai.LocalClassifierAgent import LocalClassifierAgentFactory
 from nexusvoice.ai.types import (
     ConversationResponse,
-    HomeAutomationResponse,
     HomeAutomationResponseStruct,
     NexusSupportDependencies,
     RequestType
@@ -117,7 +116,7 @@ class NexusAPIOnline(NexusAPI):
         return self._classifier_agent
     
     @property
-    def home_agent(self) -> Agent[NexusSupportDependencies, HomeAutomationResponse]:
+    def home_agent(self) -> Agent[NexusSupportDependencies, HomeAutomationResponseStruct]:
         assert self._home_agent is not None, "Home automation agent not initialized"
         return self._home_agent
     
