@@ -44,6 +44,6 @@ async def test_nexus_mcp_servers():
     # response = await api.prompt_agent("test_client_id", "What is 3x + 45 where x is 13?")
     response = await api.prompt_agent("test_client_id", "How many days between 2000-01-01 and 2025-03-18?")
     assert isinstance(response, str)
-    print(response)
+    assert "9,208" in response or "9208" in response, "Failed to get days between dates"
     
 
