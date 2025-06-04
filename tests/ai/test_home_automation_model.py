@@ -120,5 +120,5 @@ def test_local_home_automation_agent_factory_invalid_intent(home_control_tool):
     print(result)
     assert isinstance(result, AgentRunResult)
     assert isinstance(result.output, HomeAutomationResponseStruct)
-    assert called['value'], "Home control tool was not called"
+    assert not called['value'], "Home control tool was not called"
 
