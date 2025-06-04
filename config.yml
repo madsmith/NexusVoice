@@ -28,13 +28,18 @@ agents:
       located in Wildwood, MO.
   local_home_automation:
     model: meta-llama/llama-3.2-3b-instruct
-Disabled_servers:
+servers:
   - name: run-python
     transport: stdio
     command: deno
     args: run -N -R=node_modules -W=node_modules --node-modules-dir=auto jsr:@pydantic/mcp-run-python stdio
     prefix: run_python
-  
+  - name: brave-search
+    transport: stdio
+    command: npx
+    args: -y @modelcontextprotocol/server-brave-search
+    env:
+      BRAVE_API_KEY: ${private.brave.api_key}
 whisper:
   processor:
     model: openai/whisper-large-v3-turbo

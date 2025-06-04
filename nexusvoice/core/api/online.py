@@ -95,6 +95,10 @@ class NexusAPIOnline(NexusAPI):
                 args = server["args"]
             else:
                 args = shlex.split(server["args"])
+
+        env = {}
+        if 'env' in server:
+            env = server["env"]
         
         prefix = server.get("prefix", "tool")
         in_use_count = 1
@@ -105,7 +109,8 @@ class NexusAPIOnline(NexusAPI):
         instance = MCPServerStdio(
             server["command"],
             args=args,
-            tool_prefix=prefix
+            tool_prefix=prefix,
+            env=env
         )
 
         self._mcp_servers[prefix] = instance
@@ -170,5 +175,6 @@ class NexusAPIOnline(NexusAPI):
 
     async def _process_conversational(self, text: str) -> str:
         logger.debug("Processing conversational request...")
-        result = await self.conversational_agent.run(text, deps=self._deps)
-        return result.output.text
+        async with self.conversational_agent.run_mcp_servers():
+            result = await self.conversational_agent.run(text, deps=self._deps)
+            return result.output.text
