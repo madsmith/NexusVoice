@@ -7,11 +7,23 @@ logger = get_logger(__name__)
 
 import openwakeword
 
+import logfire
+
+def configure_logfire():
+    logfire.configure()
+    logfire.instrument_pydantic_ai()
+    logfire.instrument_httpx(capture_all=True)
+
+def bootstrap(environment_mode: Literal['DEV', 'PROD']):
+    setup_environment(environment_mode)
+    suppress_warnings(environment_mode)
+    configure_logfire()
+    initialize_openwakeword()
+
 def setup_environment(environment_mode: Literal['DEV', 'PROD']):
+    os.environ["LOGFIRE_SEND_TO_LOGFIRE"] = "true"
     os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
-
-    suppress_warnings(environment_mode)
 
 def suppress_warnings(environment_mode: Literal['DEV', 'PROD']):
     warnings.filterwarnings(
