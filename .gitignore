@@ -13,6 +13,7 @@ config_private.yml
 # Runtime artifacts
 __pycache__
 *.pyc
+node_modules
 latest_silero_models.yml
 
 # Model files
