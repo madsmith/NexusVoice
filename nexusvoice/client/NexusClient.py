@@ -160,16 +160,19 @@ class NexusVoiceClient:
         self._tts_engine.initialize()
         
     async def run(self):
-        logger.info(f"Starting {self.__class__.__name__} {self.client_id}")
+        try:
+            logger.info(f"Starting {self.__class__.__name__} {self.client_id}")
 
-        await self.initialize()
+            await self.initialize()
 
-        self.running = True
+            self.running = True
 
-        command_processor_task = asyncio.create_task(self.process_commands())
-        audio_processing_task = asyncio.create_task(self.process_audio())
+            command_processor_task = asyncio.create_task(self.process_commands())
+            audio_processing_task = asyncio.create_task(self.process_audio())
 
-        await asyncio.gather(command_processor_task, audio_processing_task)
+            await asyncio.gather(command_processor_task, audio_processing_task)
+        except asyncio.exceptions.CancelledError:
+            pass
 
     async def process_audio(self):
         logger.info("Listening for audio")
@@ -214,10 +217,10 @@ class NexusVoiceClient:
                     command = await self._command_queue.get()
                     tg.create_task(self._process_command(command))
                 except asyncio.CancelledError:
-                    logger.info("Shutting down {self.getName()}")
+                    logger.info(f"Shutting down {self.name}")
                     break
                 except KeyboardInterrupt:
-                    logger.info("Shutting down {self.getName()}")
+                    logger.info(f"Shutting down {self.name}")
                     break
                 except Exception as e:
                     logger.error(f"Error processing command: {e}")
@@ -230,7 +233,7 @@ class NexusVoiceClient:
     async def _process_command(self, command):
         logger.debug(f"Processing command {command}")
         if isinstance(command, NexusVoiceClient.CommandShutdown):
-            logger.info("Shutting down {self.getName()}")
+            logger.info(f"Shutting down {self.name}")
             await self.stop()
         elif isinstance(command, NexusVoiceClient.CommandWakeWord):
             await self._process_command_wake_word(command)
@@ -245,7 +248,7 @@ class NexusVoiceClient:
             logger.debug(f"Wake word {command.wake_word} not confirmed")
             self.stopRecording(cancel=True)
         else:
-            logger.trace("Wake word {command.wake_word} confirmed")
+            logger.trace(f"Wake word {command.wake_word} confirmed")
             self.startRecording(confirmed=True)
 
     def _resample_audio(self, audio_tensor: torch.Tensor, orig_freq=24000, new_freq=16000):
