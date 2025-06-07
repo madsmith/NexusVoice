@@ -40,6 +40,7 @@ async def run_client():
 
         await client_running
     except KeyboardInterrupt:
+        logger.warning(f"Exiting due to KeyboardInterrupt - run_client")
         if client:
             await client.stop()
     except Exception as e:
@@ -48,7 +49,14 @@ async def run_client():
         traceback.print_exc()
 
 def main():
-    asyncio.run(run_client())
+    try:
+        asyncio.run(run_client())
+    except KeyboardInterrupt:
+        logger.warning(f"UNHANDLED: Exiting due to KeyboardInterrupt")
+    except Exception as e:
+        logger.error(f"UNHANDLED: {e}")
+        import traceback
+        traceback.print_exc()
 
 if __name__ == "__main__":
-    asyncio.run(run_client())
+    main()
