@@ -1,1 +1,1 @@
-from .base import NexusAPI
+from .base import NexusAPI, NexusAPIContext

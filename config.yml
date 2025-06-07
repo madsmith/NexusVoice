@@ -1,6 +1,7 @@
 nexus:
   client:
     no_response_error: "Something went wrong, there is no response."
+    context_open_timeout: 30
 openai:
   api_key: ${private.openai.api_key}
 agents:
@@ -28,12 +29,13 @@ agents:
       located in Wildwood, MO.
   local_home_automation:
     model: meta-llama/llama-3.2-3b-instruct
-servers:
+servers: 
   - name: run-python
     transport: stdio
     command: deno
     args: run -N -R=node_modules -W=node_modules --node-modules-dir=auto jsr:@pydantic/mcp-run-python stdio
     prefix: run_python
+servers_disabled:
   - name: brave-search
     transport: stdio
     command: npx

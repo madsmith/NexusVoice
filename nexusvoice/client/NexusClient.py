@@ -1,26 +1,27 @@
 import asyncio
-from typing import Optional
-
+import logfire
 import logging
 import numpy as np
 from openwakeword.model import Model as OpenWakeWordModel
 from pathlib import Path
 import pyaudio
 import silero_vad
-import time
 from silero_vad.model import OnnxWrapper
+import time
 import torch
 import torchaudio
+from typing import Optional
 
 from nexusvoice.ai.AudioInferenceEngine import AudioInferenceEngine
 from nexusvoice.ai.TTSInferenceEngine import TTSInferenceEngine
 from nexusvoice.audio.utils import AudioBuffer, save_recording, save_recording_async
 from nexusvoice.audio.AudioDevice import AudioDevice
 from nexusvoice.client.RecordingState import RecordingState
-from nexusvoice.core.api import NexusAPI
+from nexusvoice.core.api import NexusAPI, NexusAPIContext
 from nexusvoice.core.api.online import NexusAPIOnline
 from nexusvoice.core.config import NexusConfig
 from nexusvoice.utils.logging import get_logger
+from nexusvoice.utils.debug import TimeThis
 
 logger = get_logger(__name__)
 
@@ -51,6 +52,7 @@ class NexusVoiceClient:
         self.config = config
 
         self._api: Optional[NexusAPI] = None
+        self.context: Optional[NexusAPIContext] = None
 
         self._audio_device: Optional[AudioDevice] = None
 
@@ -69,6 +71,9 @@ class NexusVoiceClient:
         self._recording_state = RecordingState()
 
         self.running = False
+
+        # Context manager task state
+        self._init_context_manager_task()
 
     @property
     def audio_device(self) -> AudioDevice:
@@ -101,25 +106,35 @@ class NexusVoiceClient:
         return self._api
 
     async def initialize(self):
-        await self._initialize_api()
-        self._initialize_wake_word_model()
-        self._initialize_VAD_model()
-        self._initialize_whisper_model()
-        self._initialize_TTS_model()
+        with logfire.span("NexusVoiceClient Initialize"):
+            await self._initialize_api()
+            
+            self._initialize_wake_word_model()
+            self._initialize_VAD_model()
+            self._initialize_whisper_model()
+            self._initialize_TTS_model()
 
-        self._initialize_audio_device()
+            self._initialize_audio_device()
 
+        
+        if not hasattr(self, '_context_manager_task') or self._context_manager_task is None:
+            self._init_context_manager_task()
+            self._context_manager_task = asyncio.create_task(self._context_manager())
+
+    @logfire.instrument("Initialize API")
     async def _initialize_api(self):
         logger.info("Initializing API")
         self._api = NexusAPIOnline(self.config)
         await self._api.initialize()
 
+    @logfire.instrument("Initialize Audio Device")
     def _initialize_audio_device(self):
         logger.info("Initializing audio device")
 
         self._audio_device = AudioDevice()
         self._audio_device.set_sample_delay(self.config.get("audio.sample_delay", -2200))
 
+    @logfire.instrument("Initialize Wake Word Model")
     def _initialize_wake_word_model(self):
         logger.info("Initializing wake word model")
 
@@ -136,6 +151,7 @@ class NexusVoiceClient:
             enable_speex_noise_suppression=True
         )
 
+    @logfire.instrument("Initialize VAD Model")
     def _initialize_VAD_model(self):
         logger.info("Initializing VAD model")
 
@@ -145,6 +161,7 @@ class NexusVoiceClient:
             raise RuntimeError("Failed to load VAD model")
         self._vad_model = vad_model
 
+    @logfire.instrument("Initialize Whisper Model")
     def _initialize_whisper_model(self):
         logger.info("Initializing Whisper STT...")
 
@@ -152,12 +169,121 @@ class NexusVoiceClient:
         self._whisper_engine = AudioInferenceEngine(model)
         self._whisper_engine.initialize()
 
+    @logfire.instrument("Initialize TTS Model")
     def _initialize_TTS_model(self):
         logger.info("Initializing TTS model...")
 
         voice = self.config.tts.get("voice", None)
         self._tts_engine = TTSInferenceEngine(voices=voice)
         self._tts_engine.initialize()
+
+    def _init_context_manager_task(self):
+        self._context_open_requested = asyncio.Event()
+        self._context_stop_requested = asyncio.Event()
+        self._context_open_complete = asyncio.Event()
+        self._context_close_complete = asyncio.Event()
+        self._context_manager_task = None
+        self.context = None
+        self._context_open = False
+        self._context_opened_at = None  # Track when context was opened
+        self._context_close_complete.set()  # Initially closed
+
+    @logfire.instrument("Request Context Open")
+    async def _request_context_open(self):
+        self._context_open_requested.set()
+        await self._context_open_complete.wait()
+        self._context_open_complete.clear()
+
+    @logfire.instrument("Request Context Close")
+    async def _request_context_close(self):
+        self._context_stop_requested.set()
+        await self._context_close_complete.wait()
+        self._context_close_complete.clear()
+    
+    async def _context_manager(self):
+        # Loop that opens and closes the context on demand
+        while True:
+            # Wait for the context to be requested to be opened
+            await self._context_open_requested.wait()
+            with logfire.span("Context Manager Lifecycle"):
+                self._context_open_requested.clear()
+
+                # Get a runtime context from the API
+                self.context = await self.api.run_context()
+
+                try:
+                    # Phase 1: Open the context 
+                    with logfire.span("Context Open"):
+                        # If the context is open, update the time
+                        if self._context_open:
+                            # Mark the context open time
+                            self._context_opened_at = time.time()
+                            self._context_open_complete.set()
+                        else:
+                            # Open the context
+                            await self.context.__aenter__()
+
+                            # Mark the context as open with the time
+                            self._context_open = True
+                            self._context_opened_at = time.time()
+                            self._context_open_complete.set()
+
+                    # Phase 2: Hold the context open
+                    with logfire.span("Context Held Open"):
+                        timeout = self.config.get("nexus.client.context_open_timeout", 15)
+                        try:
+                            await asyncio.wait_for(self._context_stop_requested.wait(), timeout=timeout)
+                            
+                            if self._context_stop_requested.is_set():
+                                logfire.warning("Context closing due to stop request")
+                                await self.context.__aexit__(None, None, None)
+                                self.context = None
+                                self._context_open = False
+                                self._context_opened_at = None
+                                self._context_open_complete.clear()
+                                self._context_close_complete.set()
+                            else:
+                                logfire.warning("Context closing due to timeout")
+                                await self.context.__aexit__(None, None, None)
+                                self.context = None
+                                self._context_open = False
+                                self._context_opened_at = None
+                                self._context_open_complete.clear()
+                                self._context_close_complete.set()
+                        except asyncio.TimeoutError:
+                            logfire.warning("Content closing due to timeout")
+                        except Exception as e:
+                            logfire.error("Some other exception ", exception=e)
+                        self._context_stop_requested.clear()
+                except asyncio.TimeoutError:
+                    logfire.warning("Context held open for too long, closing")
+                except Exception as e:
+                    logfire.error(f"Error in context manager: {e}")
+                finally:
+                    # Phase 3: Close the context
+                    with logfire.span("Context Closed"):
+                        if not self.context:
+                            logfire.warning("Context is missing, can not close")
+                            self._context_close_complete.set()
+                        else:
+                            await self.context.__aexit__(None, None, None)
+                            self.context = None
+                            self._context_open = False
+                            self._context_opened_at = None
+                            self._context_open_complete.clear()
+                            self._context_close_complete.set()
+
+    async def open_context(self):
+        if not self._context_open:
+            await self._request_context_open()
+        else:
+            logger.warning(f"Context is already open")
+
+    async def close_context(self):
+        if self._context_open:
+            await self._request_context_close()
+        else:
+            logger.warning(f"Context is not open")
         
     async def run(self):
         try:
@@ -199,6 +325,7 @@ class NexusVoiceClient:
             except asyncio.CancelledError:
                 break
             except KeyboardInterrupt:
+                logger.info(f"Exiting due to KeyboardInterrupt - process_audio")
                 break
             except Exception as e:
                 logger.error(f"Error in {self.name}: {e}")
@@ -217,9 +344,11 @@ class NexusVoiceClient:
                     command = await self._command_queue.get()
                     tg.create_task(self._process_command(command))
                 except asyncio.CancelledError:
+                    logger.info(f"CancelledError - process_commands")
                     logger.info(f"Shutting down {self.name}")
                     break
                 except KeyboardInterrupt:
+                    logger.info(f"Exiting due to KeyboardInterrupt - process_commands")
                     logger.info(f"Shutting down {self.name}")
                     break
                 except Exception as e:
@@ -296,7 +425,16 @@ class NexusVoiceClient:
 
         await self._do_text_inference(text)
 
+    @logfire.instrument("Do Text Inference")
     async def _do_text_inference(self, text):
+        import time
+        # Check if context is open and if it has been open for more than 90 seconds
+        now = time.time()
+        if self._context_open and self._context_opened_at is not None:
+            if now - self._context_opened_at > self.config.get("nexus.client.context_open_timeout", 15):
+                await self.close_context()
+        await self.open_context()
+
         # Use PydanticAgent for conversation/reasoning
         response = await self.api.prompt_agent(self.client_id, text)
 
@@ -309,13 +447,15 @@ class NexusVoiceClient:
                 "Something went wrong, there is no response.")
             
         # Use TTS engine to speak the response
-        audio_tensor = self.tts_engine.infer(spoken_response, voice=self.config.tts.voice)
+        with logfire.span("TTS Inference"):
+            audio_tensor = self.tts_engine.infer(spoken_response, voice=self.config.tts.voice)
 
         # Convert the audio tensor to numpy array
         audio = self._tensor_to_int16(self._resample_audio(audio_tensor))
         
         # Play the response
-        self.audio_device.play(audio)
+        with logfire.span("Play Audio"):
+            self.audio_device.play(audio)
 
     def _process_vad(self):
         """ Process data in the vad buffer if enough data is available"""
@@ -463,6 +603,8 @@ class NexusVoiceClient:
         if self.running:
             logger.info(f"Stopping {self.name}")
             self.running = False
+
+            await self.close_context()
             
             if self._recording_state.is_recording():
                 self._speech_buffer.clear()

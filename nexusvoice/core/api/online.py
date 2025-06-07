@@ -1,5 +1,8 @@
+from contextlib import asynccontextmanager
+import logfire
 import shlex
 from pydantic_ai import Agent, RunContext
+from contextlib import AsyncExitStack
 
 from nexusvoice.ai.ConversationalAgent import ConversationalAgentFactory
 from nexusvoice.ai.HomeAutomationAgent import HomeAutomationAgentFactory
@@ -10,7 +13,8 @@ from nexusvoice.ai.types import (
     NexusSupportDependencies,
     RequestType
 )
-from nexusvoice.core.api import NexusAPI
+from nexusvoice.core.api import NexusAPI, NexusAPIContext
+
 from nexusvoice.core.config import NexusConfig
 from nexusvoice.utils.logging import get_logger
 from pydantic_ai.mcp import MCPServerStdio
@@ -18,6 +22,27 @@ from pydantic_ai.mcp import MCPServerStdio
 logger = get_logger(__name__)
 
 from nexusvoice.tools.weather import get_weather
+
+class NexusAPIOnlineContext(NexusAPIContext["NexusAPIOnlineContext"]):
+    def __init__(self, api: "NexusAPIOnline", agent_history: dict, extra_state: dict):
+        self.api = api
+        self.agent_history = agent_history
+        self.extra_state = extra_state
+        self._stack = AsyncExitStack()
+
+    async def __aenter__(self) -> "NexusAPIOnlineContext":
+        await self._stack.__aenter__()
+        agents = [
+            self.api._conversational_agent,
+            self.api._home_agent,
+            self.api._classifier_agent
+        ]
+        for agent in agents:
+            await self._stack.enter_async_context(agent.run_mcp_servers())
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self._stack.__aexit__(exc_type, exc_val, exc_tb)
 
 def home_control(ctx: RunContext[NexusSupportDependencies], intent: str, device: str, room: str) -> dict[str, str]:
     """
@@ -69,7 +94,6 @@ class NexusAPIOnline(NexusAPI):
         self._home_agent.tool(home_control)
         self._conversational_agent.tool(get_weather)
 
-
     async def _initialize_mcp_servers(self):
         logger.debug("Initializing MCP servers...")
         servers = self.config.get("servers", [])
@@ -114,7 +138,21 @@ class NexusAPIOnline(NexusAPI):
         )
 
         self._mcp_servers[prefix] = instance
-        
+
+    async def run_context(self):
+        """
+        Returns an async context manager for a NexusAPIOnline session.
+        Initializes MCP servers and attaches them to the context.
+        """
+        agent_history = {}
+        extra_state = {}
+        ctx = NexusAPIOnlineContext(
+            api=self,
+            agent_history=agent_history,
+            extra_state=extra_state,
+        )
+        return ctx
+
     @property
     def classifier_agent(self) -> Agent[NexusSupportDependencies, RequestType]:
         assert self._classifier_agent is not None, "Classifier agent not initialized"
@@ -130,6 +168,7 @@ class NexusAPIOnline(NexusAPI):
         assert self._conversational_agent is not None, "Conversational agent not initialized"
         return self._conversational_agent
 
+    @logfire.instrument("Prompt Agent: {agent_id}")
     async def prompt_agent(self, agent_id: str, prompt: str) -> str:
         # First use the classifier to determine request type
         # Try local classifier first
@@ -146,7 +185,7 @@ class NexusAPIOnline(NexusAPI):
         # Fall back to conversational response
         return await self._process_conversational(prompt)
 
-
+    @logfire.instrument("Classify Request")
     async def _classify_request(self, text: str) -> RequestType:
         try:
             result = await self.classifier_agent.run(text, deps=self._deps)
@@ -161,6 +200,7 @@ class NexusAPIOnline(NexusAPI):
                 confidence=0.0
             )
 
+    @logfire.instrument("Process Home Automation")
     async def _process_home_automation(self, text: str) -> str | None:
         logger.debug("Processing home automation request...")
         try:
@@ -173,8 +213,8 @@ class NexusAPIOnline(NexusAPI):
             
         return None
 
+    @logfire.instrument("Process Conversational")
     async def _process_conversational(self, text: str) -> str:
         logger.debug("Processing conversational request...")
-        async with self.conversational_agent.run_mcp_servers():
-            result = await self.conversational_agent.run(text, deps=self._deps)
-            return result.output.text
+        result = await self.conversational_agent.run(text, deps=self._deps)
+        return result.output.text
