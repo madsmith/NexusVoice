@@ -1,4 +1,5 @@
 from kokoro import KPipeline, KModel
+import logfire
 import re
 import threading
 import torch
@@ -42,6 +43,7 @@ class TTSInferenceEngine(InferenceEngineBase[str, torch.Tensor]):
         self.initDevice()
         self.initModel()
 
+    @logfire.instrument("Initialize Device")
     def initDevice(self):
         # aten::angle isn't implemented for MPS devices and is used in the model
         # Fallback environ needs to be specified at runtime.
@@ -51,20 +53,25 @@ class TTSInferenceEngine(InferenceEngineBase[str, torch.Tensor]):
               else "cpu"
         )
 
+    @logfire.instrument("Initialize Model")
     def initModel(self):
-        self._model = KModel(repo_id=self.model_id).to(self.device) # type: ignore
+        with logfire.span("Create Model"):
+            self._model = KModel(repo_id=self.model_id).to(self.device) # type: ignore
 
-        self._pipeline = KPipeline(
-            lang_code='en-us',
-            repo_id=self.model_id,
-            model=self._model,
-            device=self.device) # type: ignore
+        with logfire.span("Create Pipeline"):
+            self._pipeline = KPipeline(
+                lang_code='en-us',
+                repo_id=self.model_id,
+                model=self._model,
+                device=self.device) # type: ignore
         
         # Preload voices
-        if self.voices:
-            for voice in self.voices:
-                # Pipeline caches the voice internally
-                self.pipeline.load_voice(voice)
+        with logfire.span("Preload Voices"):
+            if self.voices:
+                for voice in self.voices:
+                    with logfire.span(f"Preload Voice: {voice}"):
+                        # Pipeline caches the voice internally
+                        self.pipeline.load_voice(voice)
 
     def infer(self, inputs, **inference_params):
 
