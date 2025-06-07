@@ -13,6 +13,7 @@ def configure_logfire():
     logfire.configure()
     logfire.instrument_pydantic_ai()
     logfire.instrument_httpx(capture_all=True)
+    logfire.install_auto_tracing(modules=['nexusvoice.ai'], min_duration=0.001)
 
 def bootstrap(environment_mode: Literal['DEV', 'PROD']):
     setup_environment(environment_mode)
