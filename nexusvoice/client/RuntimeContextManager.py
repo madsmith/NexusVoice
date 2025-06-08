@@ -2,9 +2,9 @@ import asyncio
 import logfire
 
 class RuntimeContextManager:
-    def __init__(self, api, context_open_timeout=15):
+    def __init__(self, api, context_timeout=15):
         self.api = api
-        self.context_timeout = context_open_timeout
+        self.context_timeout = context_timeout
 
         self._context = None
         self._context_open = False

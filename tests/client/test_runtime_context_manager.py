@@ -82,7 +82,7 @@ async def can_close_context(manager: RuntimeContextManager):
 @pytest.mark.asyncio
 async def test_runtime_context_manager_open_close(dummy_api):
     api = dummy_api
-    manager = RuntimeContextManager(api, context_open_timeout=2)
+    manager = RuntimeContextManager(api, context_timeout=2)
     manager.start()
 
     await is_not_open(manager)
@@ -105,7 +105,7 @@ async def test_runtime_context_manager_open_close(dummy_api):
 async def test_runtime_context_manager_open_close_same_task(same_task_api):
     api = same_task_api
 
-    manager = RuntimeContextManager(api, context_open_timeout=2)
+    manager = RuntimeContextManager(api, context_timeout=2)
     manager.start()
 
     await is_not_open(manager)
@@ -128,7 +128,7 @@ async def test_runtime_context_manager_open_close_same_task(same_task_api):
 async def test_context_manager_close_from_another_task(same_task_api):
     api = same_task_api
 
-    manager = RuntimeContextManager(api, context_open_timeout=2)
+    manager = RuntimeContextManager(api, context_timeout=2)
     manager.start()
 
     await can_open_context(manager)
@@ -154,7 +154,7 @@ async def test_context_manager_close_from_another_task(same_task_api):
 async def test_context_manager_reopen_after_close(dummy_api):
     api = dummy_api
 
-    manager = RuntimeContextManager(api, context_open_timeout=2)
+    manager = RuntimeContextManager(api, context_timeout=2)
     manager.start()
 
     await is_not_open(manager)
