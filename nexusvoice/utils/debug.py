@@ -16,14 +16,14 @@ class TimeThis:
             self.logfn = logfn
 
     def __enter__(self):
-        self.logfn(f"Starting: {self.taskname}")
+        self.logfn(f" ⎡ Starting: {self.taskname}")
         self.start = time.perf_counter()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         end = time.perf_counter()
         elapsed_ms = (end - self.start) * 1000
-        self.logfn(f"Elapsed time for {self.taskname}: {elapsed_ms:.2f} ms")
+        self.logfn(f" ⎣ Elapsed time for {self.taskname}: {elapsed_ms:.2f} ms")
         
 class LogLevel:
     NONE = 0
