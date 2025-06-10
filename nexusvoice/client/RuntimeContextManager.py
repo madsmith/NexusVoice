@@ -124,9 +124,13 @@ class RuntimeContextManager:
                 name="RuntimeContextManager",
             )
 
-    def stop(self):
+    async def stop(self):
         if self._manager_task:
             self._manager_task.cancel()
+            try:
+                await self._manager_task
+            except asyncio.CancelledError:
+                pass
 
     def get_task(self):
         return self._manager_task

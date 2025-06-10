@@ -80,8 +80,8 @@ async def can_close_context(manager: RuntimeContextManager):
 
     await is_not_open(manager)
 
-async def can_shutdown(manager):
-    manager.stop()
+async def can_shutdown(manager: RuntimeContextManager):
+    await manager.stop()
     try:
         task = manager.get_task()
         if task:
