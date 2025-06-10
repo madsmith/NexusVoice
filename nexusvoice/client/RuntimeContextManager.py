@@ -2,8 +2,6 @@ import asyncio
 import logfire
 from typing import Optional
 
-from nexusvoice.utils.debug import TimeThis
-
 from enum import Enum, auto
 
 class ContextState(Enum):
@@ -99,22 +97,20 @@ class RuntimeContextManager:
     async def open(self):
         """Request to open the context. Returns when context is open."""
         logfire.info("RuntimeContextManager::open")
-        with TimeThis("Context Open Request"):
-            self._context_open_complete.clear()
-            self._context_open_requested.set()
-            self._context_wake_up_requested.set()
-            logfire.info("RuntimeContextManager::open: Requested Open")
-            await self._context_open_complete.wait()
+        self._context_open_complete.clear()
+        self._context_open_requested.set()
+        self._context_wake_up_requested.set()
+        logfire.info("RuntimeContextManager::open: Requested Open")
+        await self._context_open_complete.wait()
         self._context_open_complete.clear()
 
     async def close(self):
         """Request to close the context. Returns when context is closed."""
         logfire.info("RuntimeContextManager::close")
-        with TimeThis("Context Close Request"):
-            self._context_close_complete.clear()
-            self._context_close_requested.set()
-            self._context_wake_up_requested.set()
-            await self._context_close_complete.wait()
+        self._context_close_complete.clear()
+        self._context_close_requested.set()
+        self._context_wake_up_requested.set()
+        await self._context_close_complete.wait()
         self._context_close_complete.clear()
 
     def start(self):
@@ -137,8 +133,7 @@ class RuntimeContextManager:
 
     async def _open_context(self):
         if self._context:
-            with TimeThis("Internal Context Open"):
-                await self._context.__aenter__()
+            await self._context.__aenter__()
 
             self._context_open = True
             self._context_opened_at = asyncio.get_event_loop().time()
@@ -152,8 +147,7 @@ class RuntimeContextManager:
 
     async def _close_context(self):
         if self._context:
-            with TimeThis("Internal Context Close"):
-                await self._context.__aexit__(None, None, None)
+            await self._context.__aexit__(None, None, None)
 
             self._context = None
             self._context_open = False
