@@ -93,7 +93,6 @@ class RuntimeContextManager:
         self._context_close_complete = asyncio.Event()
         self._context_wake_up_requested = asyncio.Event()
 
-
     def get_context(self):
         return self._context
 
