@@ -6,7 +6,7 @@ from nexusvoice.client.RuntimeContextManager import RuntimeContextManager
 
 import asyncio
 
-CONTEXT_TIMEOUT=3
+CONTEXT_TIMEOUT=2
 
 class DummyContext:
     _id_counter = 0
@@ -19,12 +19,12 @@ class DummyContext:
 
     async def __aenter__(self):
         self.entered = True
-        await asyncio.sleep(.2)
+        await asyncio.sleep(.1)
         return self
 
     async def __aexit__(self, exc_type, exc, tb):
         self.exited = True
-        await asyncio.sleep(.1)
+        await asyncio.sleep(.05)
 
 class SameTaskContext(DummyContext):
     def __init__(self):
