@@ -175,7 +175,6 @@ async def test_context_manager_reopen_after_close(dummy_api):
     
     await can_close_context(manager)
 
-
 @pytest.mark.asyncio
 async def test_context_manager_context_expires(dummy_api):
     api = dummy_api
