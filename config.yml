@@ -135,6 +135,7 @@ wake_word:
         - "jarvis"
         - "hey jervis"
         - "jervis"
+        - "dervis"
     - name: "nexus_v4"
       path: "./nexusvoice/models/nexus_v4.onnx"
       valid_phrases:
