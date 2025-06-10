@@ -5,7 +5,6 @@ service_name = "pytest"
 
 logfire.configure(
     console=False,
-    show_summary=False,
     send_to_logfire=True,
     service_name=service_name,
 )
