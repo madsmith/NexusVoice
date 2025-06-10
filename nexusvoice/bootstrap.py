@@ -9,16 +9,26 @@ import openwakeword
 
 import logfire
 
-def configure_logfire():
-    logfire.configure()
-    logfire.instrument_pydantic_ai()
-    logfire.instrument_httpx(capture_all=True)
-    logfire.install_auto_tracing(modules=['nexusvoice.ai'], min_duration=0.001)
+logfire_instance = None
 
-def bootstrap(environment_mode: Literal['DEV', 'PROD']):
+def get_logfire():
+    global logfire_instance
+    
+    return logfire_instance
+
+def configure_logfire(environment_mode: Literal['DEV', 'PROD'], service_name: str):
+    global logfire_instance
+
+    # Determine if running client/main or some other script
+    logfire_instance = logfire.configure(service_name=service_name, environment=environment_mode)
+    logfire_instance.instrument_pydantic_ai()
+    logfire_instance.instrument_httpx(capture_all=True)
+    logfire_instance.install_auto_tracing(modules=['nexusvoice.ai'], min_duration=0.001)
+
+def bootstrap(environment_mode: Literal['DEV', 'PROD'], service_name: str = "NexusVoice"):
     setup_environment(environment_mode)
     suppress_warnings(environment_mode)
-    configure_logfire()
+    configure_logfire(environment_mode, service_name)
     initialize_openwakeword()
 
 def setup_environment(environment_mode: Literal['DEV', 'PROD']):
