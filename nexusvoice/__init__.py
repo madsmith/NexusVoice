@@ -1,6 +1,6 @@
 import sys
 import os
-from nexusvoice.bootstrap import bootstrap, set_service_name
+from nexusvoice.bootstrap import bootstrap
 
 # Determine if the executing script is in the 'scripts' folder
 script_path = os.path.abspath(sys.argv[0])
