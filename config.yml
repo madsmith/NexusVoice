@@ -35,6 +35,10 @@ servers:
     command: deno
     args: run -N -R=node_modules -W=node_modules --node-modules-dir=auto jsr:@pydantic/mcp-run-python stdio
     prefix: run_python
+  - name: radarr-movies
+    transport: stdio
+    command: /Users/martin/Projects/python/mcp-radarr/.venv/bin/mcp-radarr
+    prefix: radarr_movies
 servers_disabled:
   - name: brave-search
     transport: stdio
