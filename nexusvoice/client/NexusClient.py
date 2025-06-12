@@ -282,7 +282,7 @@ class NexusVoiceClient:
             self.stopRecording(cancel=True)
         else:
             logger.trace(f"Wake word {command.wake_word} confirmed")
-            audio_data = AudioData.from_mp3("nexusvoice/client/resources/sounds/activation.mp3")
+            audio_data = AudioData.from_wave("nexusvoice/client/resources/sounds/activation.wav")
             self._audio_device.play(audio_data)
             self.startRecording(confirmed=True)
 
