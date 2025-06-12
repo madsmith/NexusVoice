@@ -14,7 +14,7 @@ from typing import Optional
 
 from nexusvoice.ai.AudioInferenceEngine import AudioInferenceEngine
 from nexusvoice.ai.TTSInferenceEngine import TTSInferenceEngine
-from nexusvoice.audio.utils import AudioBuffer, save_recording, save_recording_async
+from nexusvoice.audio.utils import AudioBuffer, AudioData, save_recording, save_recording_async
 from nexusvoice.audio.AudioDevice import AudioDevice
 from nexusvoice.client.RecordingState import RecordingState
 from nexusvoice.client.RuntimeContextManager import RuntimeContextManager
@@ -282,6 +282,8 @@ class NexusVoiceClient:
             self.stopRecording(cancel=True)
         else:
             logger.trace(f"Wake word {command.wake_word} confirmed")
+            audio_data = AudioData.from_mp3("nexusvoice/client/resources/sounds/activation.mp3")
+            self._audio_device.play(audio_data)
             self.startRecording(confirmed=True)
 
     def _resample_audio(self, audio_tensor: torch.Tensor, orig_freq=24000, new_freq=16000):
