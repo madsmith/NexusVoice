@@ -277,6 +277,24 @@ class AudioData:
 
         return audio_data
 
+    @classmethod
+    def from_mp3(cls, filename):
+        if isinstance(filename, Path):
+            filename = str(filename)
+
+        audio_segment = AudioSegment.from_mp3(filename)
+        sample_width = audio_segment.sample_width
+        frame_bytes = audio_segment.raw_data
+        
+        audio_data = cls(
+            frame_bytes,
+            format=cls.sample_width_to_format(sample_width),
+            channels=audio_segment.channels,
+            rate=audio_segment.frame_rate
+        )
+
+        return audio_data
+
 class PlaybackBuffer:
     def __init__(self, rate: int):
         self.rate = rate
