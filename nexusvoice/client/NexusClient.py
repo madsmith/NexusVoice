@@ -150,7 +150,7 @@ class NexusVoiceClient:
     def _initialize_wake_word_model(self):
         logger.info("Initializing wake word model")
 
-        model_conf = self.config.get("wake_word.models")
+        model_conf = self.config.get("nexus.client.wake_word.models")
         if model_conf is None:
             logger.error("No wake word models found in config")
             raise RuntimeError("No wake word models found in config")
@@ -325,7 +325,7 @@ class NexusVoiceClient:
         return audio_int16.numpy().tobytes()
         
     async def _process_command_process_audio(self, command):
-        if getattr(self, 'save_recordings', False):
+        if self.config.get("nexus.client.save_recordings", False):
             filename = Path("recordings", f"recording_{self.client_id}_{int(time.time())}_audio.wav")
             task = asyncio.create_task(save_recording_async(command.audio_bytes, filename))
             def on_task_done(task):
@@ -455,7 +455,7 @@ class NexusVoiceClient:
 
         transcription = self.whisper_engine.infer(np_audio, sampling_rate=AUDIO_SAMPLE_RATE)
 
-        if getattr(self, 'save_recordings', False):
+        if self.config.get("nexus.client.save_recordings", False):
             # Save the recording to a file
             filename = Path("recordings", f"recording_{self.client_id}_{int(time.time())}_wakeword.wav")
             task = asyncio.create_task(save_recording_async(command.audio_bytes, filename))
@@ -471,7 +471,7 @@ class NexusVoiceClient:
 
         logger.debug(f"Transcription: {transcription}")
 
-        model_conf = self.config.get("wake_word.models")
+        model_conf = self.config.get("nexus.client.wake_word.models")
         if model_conf is None:
             logger.error("No wake word models found in config")
             raise RuntimeError("No wake word models found in config")

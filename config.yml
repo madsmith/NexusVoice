@@ -1,7 +1,32 @@
 nexus:
   client:
     no_response_error: "Something went wrong, there is no response."
-    context_open_timeout: 90
+    context_timeout: 90
+    wake_word:
+      models:
+        - name: "hey jarvis"
+          valid_phrases:
+            - "a jarvis"
+            - "hey jarvis"
+            - "jarvis"
+            - "hey jervis"
+            - "jervis"
+            - "dervis"
+        - name: "nexus_v4"
+          path: "./nexusvoice/models/nexus_v4.onnx"
+          valid_phrases:
+            - "a nexus"
+            - "hey nexus"
+            - "nexus"
+        - name: "stop"
+          path: "./nexusvoice/models/stop.onnx"
+          valid_phrases:
+            - stop
+            - never mind
+            - nevermind
+            - cancel
+            - that's enough
+            - pause
 openai:
   api_key: ${private.openai.api_key}
 agents:
@@ -130,31 +155,6 @@ debug:
   save_responses: True
 audio:
   sample_delay: -2200
-wake_word:
-  models:
-    - name: "hey jarvis"
-      valid_phrases:
-        - "a jarvis"
-        - "hey jarvis"
-        - "jarvis"
-        - "hey jervis"
-        - "jervis"
-        - "dervis"
-    - name: "nexus_v4"
-      path: "./nexusvoice/models/nexus_v4.onnx"
-      valid_phrases:
-        - "a nexus"
-        - "hey nexus"
-        - "nexus"
-    - name: "stop"
-      path: "./nexusvoice/models/stop.onnx"
-      valid_phrases:
-        - stop
-        - never mind
-        - nevermind
-        - cancel
-        - that's enough
-        - pause
 logging:
   suppressx: [
     "httpcore.connection",
