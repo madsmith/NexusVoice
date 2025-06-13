@@ -34,14 +34,14 @@ async def run_client():
             logger.debug("Creating NexusVoiceClient")
             client = NexusVoiceClient("local", config)
             # In the future, NexusVoiceClient should support async start/stop
-            client_running = client.run()
+            run_coro = client.run()
 
             if args.cmd:
                 prompt = " ".join(args.cmd).strip()
                 if prompt:
                     client.add_command(CommandProcessText(prompt))
 
-            await client_running
+            await run_coro
     except KeyboardInterrupt:
         logger.warning(f"Exiting due to KeyboardInterrupt - run_client")
         if client:
