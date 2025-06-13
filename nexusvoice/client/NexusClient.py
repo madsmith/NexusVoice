@@ -521,18 +521,20 @@ class NexusVoiceClient:
             self.add_command(NexusVoiceClient.CommandProcessAudio(audio_data))
 
     async def stop(self):
-        if self.running:
-            logger.info(f"Stopping {self.name}")
-            self.running = False
+        if not self.running:
+            return await asyncio.sleep(0)
 
-            await self.context_manager.close()
-            await self.context_manager.stop()
+        logger.info(f"Stopping {self.name}")
+        self.running = False
+
+        await self.context_manager.close()
+        await self.context_manager.stop()
             
-            if self._recording_state.is_recording():
-                self._speech_buffer.clear()
-                self.stopRecording(cancel=True)
+        if self._recording_state.is_recording():
+            self._speech_buffer.clear()
+            self.stopRecording(cancel=True)
 
-            self.audio_device.shutdown()
+        self.audio_device.shutdown()
 
     def add_command(self, command):
         logger.debug(f"Adding command {command}")
