@@ -1,7 +1,7 @@
 nexus:
   client:
     no_response_error: "Something went wrong, there is no response."
-    context_open_timeout: 30
+    context_open_timeout: 90
 openai:
   api_key: ${private.openai.api_key}
 agents:
