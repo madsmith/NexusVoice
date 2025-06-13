@@ -197,8 +197,12 @@ class NexusVoiceClient:
 
             self.running = True
 
-            command_processor_task = asyncio.create_task(self.process_commands())
-            audio_processing_task = asyncio.create_task(self.process_audio())
+            command_processor_task = asyncio.create_task(
+                self.process_commands(),
+                name="Command Processor")
+            audio_processing_task = asyncio.create_task(
+                self.process_audio(),
+                name="Mic Audio Processor")
 
             await asyncio.gather(command_processor_task, audio_processing_task)
         except asyncio.exceptions.CancelledError:
@@ -242,39 +246,56 @@ class NexusVoiceClient:
 
     async def process_commands(self):
         """ Process commands from the command queue """
-        async with asyncio.TaskGroup() as tg:
-            while self.running:
-                try:
-                    command = await self._command_queue.get()
-                    tg.create_task(self._process_command(command))
-                except asyncio.CancelledError:
-                    logger.info(f"CancelledError - process_commands")
-                    logger.info(f"Shutting down {self.name}")
-                    break
-                except KeyboardInterrupt:
-                    logger.info(f"Exiting due to KeyboardInterrupt - process_commands")
-                    logger.info(f"Shutting down {self.name}")
-                    break
-                except Exception as e:
-                    logger.error(f"Error processing command: {e}")
-                    # Show the traceback
-                    import traceback
-                    logger.error(traceback.format_exc())
+        command = None
+        try:
+            async with asyncio.TaskGroup() as tg:
+                while self.running:
+                    try:
+                        command = await self._command_queue.get()
+                        tg.create_task(
+                            self._process_command(command),
+                            name="Process Command")
+                    except asyncio.CancelledError:
+                        logger.info(f"CancelledError - process_commands")
+                        logger.info(f"Shutting down {self.name}")
+                        break
+                    except KeyboardInterrupt:
+                        logger.info(f"Exiting due to KeyboardInterrupt - process_commands")
+                        logger.info(f"Shutting down {self.name}")
+                        break
+                    except Exception as e:
+                        logger.error(f"Error processing command: {e}")
+                        # Show the traceback
+                        import traceback
+                        logger.error(traceback.format_exc())
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            pass
         
-        await self.stop()
+        # await self.stop()
+        logfire.info(f"Shutting down {self.name}")
+        asyncio.create_task(
+            self.stop(),
+            name="Shutdown Client"
+        )
     
     async def _process_command(self, command):
-        logger.debug(f"Processing command {command}")
-        if isinstance(command, NexusVoiceClient.CommandShutdown):
-            logger.info(f"Shutting down {self.name}")
-            await self.stop()
-        elif isinstance(command, NexusVoiceClient.CommandWakeWord):
-            await self._process_command_wake_word(command)
-        elif isinstance(command, NexusVoiceClient.CommandProcessAudio):
-            await self._process_command_process_audio(command)
-        elif isinstance(command, NexusVoiceClient.CommandProcessText):
-            await self._process_command_process_text(command)
-
+        try:
+            logger.debug(f"Processing command {command}")
+            if isinstance(command, NexusVoiceClient.CommandShutdown):
+                logger.info(f"Shutting down {self.name}")
+                await self.stop()
+            elif isinstance(command, NexusVoiceClient.CommandWakeWord):
+                await self._process_command_wake_word(command)
+            elif isinstance(command, NexusVoiceClient.CommandProcessAudio):
+                await self._process_command_process_audio(command)
+            elif isinstance(command, NexusVoiceClient.CommandProcessText):
+                await self._process_command_process_text(command)
+        except Exception as e:
+            logger.error(f"Error processing command: {e}")
+            raise
+    
     async def _process_command_wake_word(self, command):
         logger.debug(f"Received wake word command {command.wake_word}")
         if not self._confirm_wake_word(command):
@@ -283,7 +304,7 @@ class NexusVoiceClient:
         else:
             logger.trace(f"Wake word {command.wake_word} confirmed")
             audio_data = AudioData.from_wave("nexusvoice/client/resources/sounds/activation.wav")
-            self._audio_device.play(audio_data)
+            self.audio_device.play(audio_data)
             self.startRecording(confirmed=True)
 
     def _resample_audio(self, audio_tensor: torch.Tensor, orig_freq=24000, new_freq=16000):

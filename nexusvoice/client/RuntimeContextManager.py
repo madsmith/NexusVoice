@@ -1,4 +1,5 @@
 import asyncio
+import traceback
 import logfire
 from typing import Optional
 
@@ -55,6 +56,9 @@ class ContextStateMachine:
             ContextEvent.OPENED: ContextState.OPEN_IDLE,
             ContextEvent.SHUT_DOWN: ContextState.SHUTTING_DOWN,
         },
+        ContextState.SHUTTING_DOWN: {
+            ContextEvent.SHUT_DOWN: ContextState.SHUT_DOWN,
+        },
     }
 
     def __init__(self):
@@ -67,6 +71,10 @@ class ContextStateMachine:
             if next_state != ContextState.NONE:
                 logfire.info(f"ContextStateMachine: {self.state} -> {next_state} (event: {event})")
                 self.state = next_state
+            else:
+                logfire.info(f"ContextStateMachine: Unhandled event {event} for state {self.state}")
+        else:
+            logfire.info(f"ContextStateMachine: Unhandled event {event} in state {self.state}")
         return self.state
 
     def __repr__(self):
@@ -100,7 +108,6 @@ class RuntimeContextManager:
         self._context_open_complete.clear()
         self._context_open_requested.set()
         self._context_wake_up_requested.set()
-        logfire.info("RuntimeContextManager::open: Requested Open")
         await self._context_open_complete.wait()
         self._context_open_complete.clear()
 
@@ -122,6 +129,7 @@ class RuntimeContextManager:
 
     async def stop(self):
         if self._manager_task:
+            logfire.info("RuntimeContextManager::stop")
             self._manager_task.cancel()
             try:
                 await self._manager_task
@@ -162,10 +170,21 @@ class RuntimeContextManager:
         return None
     
     async def _context_manager(self):
+        current_state = None
+        state_count = 0
         while True:
             try:
                 state = self._state_machine.state
                 logfire.info(f"ContextManager: State: {state}")
+                if state != current_state:
+                    current_state = state
+                    state_count = 1
+                else:
+                    logfire.warning(f"ContextManager: Possible state loop detected in state {state}")
+                    state_count += 1
+                if state_count > 3:
+                    logfire.warning(f"ContextManager: State: {state} has been in state for {state_count} iterations")
+                    break
 
                 if state == ContextState.CLOSE_IDLE or state == ContextState.OPEN_IDLE:
                     event: Optional[ContextEvent] = None
@@ -196,10 +215,16 @@ class RuntimeContextManager:
                     self._context_open_complete.set()
 
                 elif state == ContextState.CLOSING or state == ContextState.SHUTTING_DOWN:
-                    await self._close_context()
+                    logfire.info(f"ContextManager: Closing")
+                    try:
+                        await self._close_context()
+                    except BaseException as e:
+                        logfire.error(f"ContextManager: Error closing context: {e}")
+                        traceback.print_exc()
 
                     event = ContextEvent.SHUT_DOWN if state == ContextState.SHUTTING_DOWN else ContextEvent.CLOSED
                     self._state_machine.on_event(event)
+                    logfire.info(f"ContextManager: Transitioned to state: {event} {self._state_machine.state}")
                     self._context_close_complete.set()
 
                 elif state == ContextState.REFRESH:
@@ -212,11 +237,18 @@ class RuntimeContextManager:
                     break
 
                 else:
+                    logfire.error(f"ContextManager: Unknown state: {state}")
                     raise Exception(f"Unknown state: {state}")
 
             except asyncio.CancelledError:
                 logfire.info("ContextManager: Cancelled")
-                self._state_machine.on_event(ContextEvent.SHUT_DOWN)
+                if self._state_machine.state != ContextState.SHUT_DOWN:
+                    self._state_machine.on_event(ContextEvent.SHUT_DOWN)
             except Exception as e:
                 logfire.error(f"ContextManager: Exception: {e}")
-                self._state_machine.on_event(ContextEvent.SHUT_DOWN)
+                if self._state_machine.state != ContextState.SHUT_DOWN:
+                    self._state_machine.on_event(ContextEvent.SHUT_DOWN)
+            except BaseException as e:
+                logfire.error(f"ContextManager: BaseException: {e}")
+                if self._state_machine.state != ContextState.SHUT_DOWN:
+                    self._state_machine.on_event(ContextEvent.SHUT_DOWN)

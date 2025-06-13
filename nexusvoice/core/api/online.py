@@ -1,8 +1,10 @@
-from contextlib import asynccontextmanager
+import asyncio
+from contextlib import AsyncExitStack
 import logfire
 import shlex
+from typing import Optional
 from pydantic_ai import Agent, RunContext
-from contextlib import AsyncExitStack
+from pydantic_ai.messages import ModelMessage
 
 from nexusvoice.ai.ConversationalAgent import ConversationalAgentFactory
 from nexusvoice.ai.HomeAutomationAgent import HomeAutomationAgentFactory
@@ -17,32 +19,48 @@ from nexusvoice.core.api import NexusAPI, NexusAPIContext
 
 from nexusvoice.core.config import NexusConfig
 from nexusvoice.utils.logging import get_logger
+from nexusvoice.utils.debug import DebugContext
 from pydantic_ai.mcp import MCPServerStdio
 
 logger = get_logger(__name__)
 
 from nexusvoice.tools.weather import get_weather
 
+
 class NexusAPIOnlineContext(NexusAPIContext["NexusAPIOnlineContext"]):
-    def __init__(self, api: "NexusAPIOnline", agent_history: dict, extra_state: dict):
+    def __init__(self, api: "NexusAPIOnline", agent_history: list[ModelMessage], extra_state: dict):
         self.api = api
         self.agent_history = agent_history
         self.extra_state = extra_state
+        self._is_open = False
         self._stack = AsyncExitStack()
 
     async def __aenter__(self) -> "NexusAPIOnlineContext":
         await self._stack.__aenter__()
+
         agents = [
-            self.api._conversational_agent,
             self.api._home_agent,
-            self.api._classifier_agent
+            self.api._classifier_agent,
+            self.api._conversational_agent,
         ]
-        for agent in agents:
-            await self._stack.enter_async_context(agent.run_mcp_servers())
+        
+        for i, agent in enumerate(agents):
+            ctx = agent.run_mcp_servers()
+            await self._stack.enter_async_context(ctx)
+            # await self._stack.enter_async_context(DebugContext(ctx, f"Agent {i}", logger.debug))
+
+        self._is_open = True
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        await self._stack.__aexit__(exc_type, exc_val, exc_tb)
+        self._is_open = False
+        try:
+            await self._stack.__aexit__(exc_type, exc_val, exc_tb)
+        except asyncio.CancelledError:
+            pass
+
+    def is_open(self) -> bool:
+        return self._is_open
 
 def home_control(ctx: RunContext[NexusSupportDependencies], intent: str, device: str, room: str) -> dict[str, str]:
     """
@@ -75,6 +93,8 @@ class NexusAPIOnline(NexusAPI):
         self._classifier_agent = None
         self._home_agent = None
         self._conversational_agent = None
+
+        self._context: Optional[NexusAPIOnlineContext] = None
 
 
     async def initialize(self):
@@ -144,14 +164,31 @@ class NexusAPIOnline(NexusAPI):
         Returns an async context manager for a NexusAPIOnline session.
         Initializes MCP servers and attaches them to the context.
         """
-        agent_history = {}
+        agent_history = []
         extra_state = {}
         ctx = NexusAPIOnlineContext(
             api=self,
             agent_history=agent_history,
             extra_state=extra_state,
         )
+
+        # Check if the context is already initialized and open, and warn of 
+        # possible errors if that's the case
+        if self._context is not None and self._context.is_open():
+            logger.warning("Context is already initialized and open.")
+        
+        # Set the context so that it can be accessed later
+        self._context = ctx
         return ctx
+
+    @property
+    def context(self) -> NexusAPIOnlineContext:
+        """
+        Returns the current context for the API session.
+        It's expected that the API user is managing the context lifecycle and has called run_context() to initialize it.
+        """
+        assert self._context is not None, "Context not initialized"
+        return self._context
 
     @property
     def classifier_agent(self) -> Agent[NexusSupportDependencies, RequestType]:
@@ -216,5 +253,14 @@ class NexusAPIOnline(NexusAPI):
     @logfire.instrument("Process Conversational")
     async def _process_conversational(self, text: str) -> str:
         logger.debug("Processing conversational request...")
-        result = await self.conversational_agent.run(text, deps=self._deps)
+        message_history = self.context.agent_history
+
+        result = await self.conversational_agent.run(
+            text,
+            message_history=message_history,
+            deps=self._deps)
+
+        # Update the agent history
+        self.context.agent_history = result.all_messages()
+
         return result.output.text
