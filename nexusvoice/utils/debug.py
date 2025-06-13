@@ -137,3 +137,20 @@ def reset_logging(loggers: Union[list[str],str,None], level: int = logging.WARNI
     for logger_name in loggers:
         logging.getLogger(logger_name).setLevel(level)
     
+class DebugContext:
+    def __init__(self, ctx, label, logfn):
+        self.ctx = ctx
+        self.label = label
+        if not logfn:
+            self.logfn = lambda x: logging.debug(x)
+        self.logfn = logfn
+
+    async def __aenter__(self):
+        self.logfn(f"[DEBUG] __aenter__ for agent: {self.label}")
+        return await self.ctx.__aenter__()
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        self.logfn(f"[DEBUG] __aexit__ for agent: {self.label}")
+        result = await self.ctx.__aexit__(exc_type, exc_val, exc_tb)
+        self.logfn(f"[DEBUG] __aexit__ for agent: {self.label} complete")
+        return result
