@@ -1,9 +1,10 @@
 import asyncio
+from enum import Enum, auto
 import traceback
 import logfire
 from typing import Optional
 
-from enum import Enum, auto
+from nexusvoice.utils.state import StateMachine
 
 class ContextState(Enum):
     CLOSE_IDLE = auto()
@@ -30,7 +31,7 @@ class ContextEvent(Enum):
     def __str__(self):
         return self.name
 
-class ContextStateMachine:
+class ContextStateMachine(StateMachine[ContextState, ContextEvent]):
     # State transition table: {current_state: {event: next_state}}
     TRANSITIONS = {
         ContextState.CLOSE_IDLE: {
@@ -60,25 +61,6 @@ class ContextStateMachine:
             ContextEvent.SHUT_DOWN: ContextState.SHUT_DOWN,
         },
     }
-
-    def __init__(self):
-        self.state: ContextState = ContextState.CLOSE_IDLE
-
-    def on_event(self, event: Optional[ContextEvent]) -> ContextState:
-        if event is not None:
-            transitions = self.TRANSITIONS.get(self.state, {})
-            next_state = transitions.get(event, ContextState.NONE)
-            if next_state != ContextState.NONE:
-                logfire.info(f"ContextStateMachine: {self.state} -> {next_state} (event: {event})")
-                self.state = next_state
-            else:
-                logfire.info(f"ContextStateMachine: Unhandled event {event} for state {self.state}")
-        else:
-            logfire.info(f"ContextStateMachine: Unhandled event {event} in state {self.state}")
-        return self.state
-
-    def __repr__(self):
-        return f"<ContextStateMachine state={self.state}>"
 
 class RuntimeContextManager:
     def __init__(self, api, context_timeout=15):
@@ -206,7 +188,8 @@ class RuntimeContextManager:
                     self._context_close_requested.clear()
                     self._context_wake_up_requested.clear()
 
-                    self._state_machine.on_event(event)
+                    if event is not None:
+                        self._state_machine.on_event(event)
 
                 elif state == ContextState.OPENING:
                     self._context = await self.api.run_context()
