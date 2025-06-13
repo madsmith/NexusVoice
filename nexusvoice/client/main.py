@@ -9,6 +9,7 @@ from nexusvoice.utils.logging import get_logger
 logger = get_logger(__name__)
 
 from nexusvoice.client.NexusClient import NexusVoiceClient
+from nexusvoice.client.commands import CommandProcessText
 from nexusvoice.core.config import load_config
 
 async def run_client():
@@ -38,7 +39,7 @@ async def run_client():
             if args.cmd:
                 prompt = " ".join(args.cmd).strip()
                 if prompt:
-                    client.add_command(NexusVoiceClient.CommandProcessText(prompt))
+                    client.add_command(CommandProcessText(prompt))
 
             await client_running
     except KeyboardInterrupt:

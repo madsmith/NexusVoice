@@ -16,6 +16,13 @@ from nexusvoice.ai.AudioInferenceEngine import AudioInferenceEngine
 from nexusvoice.ai.TTSInferenceEngine import TTSInferenceEngine
 from nexusvoice.audio.utils import AudioBuffer, AudioData, save_recording, save_recording_async
 from nexusvoice.audio.AudioDevice import AudioDevice
+from nexusvoice.client.commands import (
+    Command,
+    CommandShutdown,
+    CommandWakeWord,
+    CommandProcessAudio,
+    CommandProcessText
+)
 from nexusvoice.client.RecordingState import RecordingState
 from nexusvoice.client.RuntimeContextManager import RuntimeContextManager
 from nexusvoice.core.api import NexusAPI, NexusAPIContext
@@ -246,7 +253,7 @@ class NexusVoiceClient:
 
     async def process_commands(self):
         """ Process commands from the command queue """
-        command = None
+        command: Optional[Command] = None
         try:
             async with asyncio.TaskGroup() as tg:
                 while self.running:
@@ -283,20 +290,20 @@ class NexusVoiceClient:
     async def _process_command(self, command):
         try:
             logger.debug(f"Processing command {command}")
-            if isinstance(command, NexusVoiceClient.CommandShutdown):
+            if isinstance(command, CommandShutdown):
                 logger.info(f"Shutting down {self.name}")
                 await self.stop()
-            elif isinstance(command, NexusVoiceClient.CommandWakeWord):
+            elif isinstance(command, CommandWakeWord):
                 await self._process_command_wake_word(command)
-            elif isinstance(command, NexusVoiceClient.CommandProcessAudio):
+            elif isinstance(command, CommandProcessAudio):
                 await self._process_command_process_audio(command)
-            elif isinstance(command, NexusVoiceClient.CommandProcessText):
+            elif isinstance(command, CommandProcessText):
                 await self._process_command_process_text(command)
         except Exception as e:
             logger.error(f"Error processing command: {e}")
             raise
     
-    async def _process_command_wake_word(self, command):
+    async def _process_command_wake_word(self, command: CommandWakeWord):
         logger.debug(f"Received wake word command {command.wake_word}")
         if not self._confirm_wake_word(command):
             logger.debug(f"Wake word {command.wake_word} not confirmed")
@@ -324,7 +331,8 @@ class NexusVoiceClient:
         audio_int16 = (audio_clamped * max_int16).to(torch.int16)
         return audio_int16.numpy().tobytes()
         
-    async def _process_command_process_audio(self, command):
+    async def _process_command_process_audio(self, command: CommandProcessAudio):
+        assert isinstance(command, CommandProcessAudio), "Command is not a process audio command"
         if self.config.get("nexus.client.save_recordings", False):
             filename = Path("recordings", f"recording_{self.client_id}_{int(time.time())}_audio.wav")
             task = asyncio.create_task(save_recording_async(command.audio_bytes, filename))
@@ -347,13 +355,14 @@ class NexusVoiceClient:
 
         await self._do_text_inference(transcription)
 
-    async def _process_command_process_text(self, command):
+    async def _process_command_process_text(self, command: CommandProcessText):
+        assert isinstance(command, CommandProcessText), "Command is not a process text command"
         text = command.text
 
         await self._do_text_inference(text)
 
     @logfire.instrument("Do Text Inference")
-    async def _do_text_inference(self, text):
+    async def _do_text_inference(self, text: str):
         await self.context_manager.open()
 
         # Use PydanticAgent for conversation/reasoning
@@ -442,11 +451,11 @@ class NexusVoiceClient:
                 self.wake_word_model.reset()
                 for word in detected_wake_words:
                     print(f"Detected wake word: {word} VAD: {self._speech_buffer.get_duration_ms()}ms")
-                    self.add_command(NexusVoiceClient.CommandWakeWord(word, self._speech_buffer.get_bytes()))
+                    self.add_command(CommandWakeWord(word, self._speech_buffer.get_bytes()))
                     self.startRecording()
 
-    def _confirm_wake_word(self, command):
-        assert isinstance(command, NexusVoiceClient.CommandWakeWord), "Command is not a wake word command"
+    def _confirm_wake_word(self, command: CommandWakeWord):
+        assert isinstance(command, CommandWakeWord), "Command is not a wake word command"
 
         # TODO: Use Misaki to convert the wake word into phonemes and fuzzy match phonemes?
 
@@ -518,7 +527,7 @@ class NexusVoiceClient:
                 logger.warning("No audio data to process")
                 return
             
-            self.add_command(NexusVoiceClient.CommandProcessAudio(audio_data))
+            self.add_command(CommandProcessAudio(audio_data))
 
     async def stop(self):
         if not self.running:
@@ -540,28 +549,3 @@ class NexusVoiceClient:
         logger.debug(f"Adding command {command}")
         self._command_queue.put_nowait(command)
 
-    class Command:
-        def __init__(self):
-            pass
-
-        def __str__(self):
-            return self.__class__.__name__
-        
-        def __repr__(self):
-            return self.__str__()
-    
-    class CommandShutdown(Command):
-        pass
-
-    class CommandWakeWord(Command):
-        def __init__(self, wake_word, audio_bytes: bytes):
-            self.wake_word = wake_word
-            self.audio_bytes = audio_bytes
-
-    class CommandProcessAudio(Command):
-        def __init__(self, audio_bytes):
-            self.audio_bytes = audio_bytes
-
-    class CommandProcessText(Command):
-        def __init__(self, text):
-            self.text = text
