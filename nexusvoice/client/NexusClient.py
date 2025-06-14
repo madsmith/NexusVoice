@@ -10,7 +10,7 @@ from silero_vad.model import OnnxWrapper
 import time
 import torch
 import torchaudio
-from typing import Optional
+from typing import Any, Optional, Coroutine
 
 from nexusvoice.ai.AudioInferenceEngine import AudioInferenceEngine
 from nexusvoice.ai.TTSInferenceEngine import TTSInferenceEngine
@@ -23,7 +23,7 @@ from nexusvoice.client.commands import (
     CommandProcessAudio,
     CommandProcessText
 )
-from nexusvoice.client.RecordingState import RecordingState
+from nexusvoice.client.RecordingState import RecordingState, RecEvent, RecState
 from nexusvoice.client.RuntimeContextManager import RuntimeContextManager
 from nexusvoice.core.api import NexusAPI, NexusAPIContext
 from nexusvoice.core.api.online import NexusAPIOnline
@@ -151,7 +151,7 @@ class NexusVoiceClient:
         logger.info("Initializing audio device")
 
         self._audio_device = AudioDevice()
-        self._audio_device.set_sample_delay(self.config.get("audio.sample_delay", -2200))
+        self._audio_device.set_sample_delay(self.config.get("nexus.client.audio.sample_delay", -2200))
 
     @logfire.instrument("Initialize Wake Word Model")
     def _initialize_wake_word_model(self):
@@ -184,7 +184,7 @@ class NexusVoiceClient:
     def _initialize_whisper_model(self):
         logger.info("Initializing Whisper STT...")
 
-        model = self.config.whisper.processor.get("model", "openai/whisper-large-v2")
+        model = self.config.get("nexus.whisper.processor.model", "openai/whisper-large-v2")
         self._whisper_engine = AudioInferenceEngine(model)
         self._whisper_engine.initialize()
 
@@ -192,7 +192,7 @@ class NexusVoiceClient:
     def _initialize_TTS_model(self):
         logger.info("Initializing TTS model...")
 
-        voice = self.config.tts.get("voice", None)
+        voice = self.config.get("nexus.tts.voice", None)
         self._tts_engine = TTSInferenceEngine(voices=voice)
         self._tts_engine.initialize()
         
@@ -367,6 +367,7 @@ class NexusVoiceClient:
 
         # Use PydanticAgent for conversation/reasoning
         response = await self.api.prompt_agent(self.client_id, text)
+        should_followup = response.endswith("?")
 
         logger.info(f"Response: {response}")
         
@@ -378,7 +379,7 @@ class NexusVoiceClient:
             
         # Use TTS engine to speak the response
         with logfire.span("TTS Inference"):
-            audio_tensor = self.tts_engine.infer(spoken_response, voice=self.config.tts.voice)
+            audio_tensor = self.tts_engine.infer(spoken_response, voice=self.config.get("nexus.tts.voice"))
 
         # Convert the audio tensor to numpy array
         audio = self._tensor_to_int16(self._resample_audio(audio_tensor))
@@ -386,6 +387,13 @@ class NexusVoiceClient:
         # Play the response
         with logfire.span("Play Audio"):
             self.audio_device.play(audio)
+            audio_data = AudioData(audio)
+            await asyncio.sleep(audio_data.duration())
+
+            if should_followup:
+                self._silence_duration = 0
+                self._recording_state.on_event(RecEvent.LISTEN)
+            
 
     def _process_vad(self):
         """ Process data in the vad buffer if enough data is available"""
@@ -411,18 +419,24 @@ class NexusVoiceClient:
             if is_speech:
                 logger.trace(f"VAD score: {vad_score}")
                 self._silence_duration = 0
+                self._recording_state.on_event(RecEvent.VAD_DETECTED)
             else:
                 self._silence_duration += SILERO_VAD_AUDIO_CHUNK / AUDIO_SAMPLE_RATE
-
 
             if is_speech or self._recording_state.is_recording():
                 self._speech_buffer.append(audio_frames)
 
-            if self._silence_duration > VAD_SILENCE_DURATION:
+            if self._recording_state.state == RecState.SPEECH_PENDING:
+                if self._silence_duration > self.config.get("nexus.audio.followup_timeout", 5):
+                    logger.debug("Followup timeout reached, stopping recording")
+                    self.stopRecording(cancel=True)
+
+            if self._silence_duration > self.config.get("nexus.audio.speech_timeout", VAD_SILENCE_DURATION):
                 if self._recording_state.is_recording():
                     if self._recording_state.is_processing_speech():
                         logger.debug("Silence detected, stopping recording")
                         self.stopRecording()
+                        
                 else:
                     logger.trace("Silence detected, clearing speech buffer")
                     self._speech_buffer.clear()

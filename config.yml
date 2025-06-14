@@ -27,6 +27,17 @@ nexus:
             - cancel
             - that's enough
             - pause
+    audio:
+      sample_delay: -2200
+      followup_timeout: 5
+      speech_timeout: 1.5
+  tts:
+    voice: "af_sky,af_heart"
+  whisper:
+    processor:
+      model: openai/whisper-large-v3-turbo
+    generator: 
+      model: openai/whisper-large-v3-turbo
 openai:
   api_key: ${private.openai.api_key}
 agents:
@@ -71,11 +82,6 @@ servers_disabled:
     args: -y @modelcontextprotocol/server-brave-search
     env:
       BRAVE_API_KEY: ${private.brave.api_key}
-whisper:
-  processor:
-    model: openai/whisper-large-v3-turbo
-  generator: 
-    model: openai/whisper-large-v3-turbo
 tools:
   weather:
     api_key: ${private.weather.api_key}
@@ -148,15 +154,8 @@ llm:
     ]
 
     Your internal knowledge does **not** include current date or time. You must use tools to obtain that information.
-tts:
-  voice: "af_sky,af_heart"
-debug:
-  save_recordings: False
-  save_responses: True
-audio:
-  sample_delay: -2200
 logging:
-  suppressx: [
+  suppress: [
     "httpcore.connection",
     "httpcore.http11",
     "httpx",
