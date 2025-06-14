@@ -10,7 +10,7 @@ from silero_vad.model import OnnxWrapper
 import time
 import torch
 import torchaudio
-from typing import Any, Optional, Coroutine
+from typing import Optional
 
 from nexusvoice.ai.AudioInferenceEngine import AudioInferenceEngine
 from nexusvoice.ai.TTSInferenceEngine import TTSInferenceEngine
