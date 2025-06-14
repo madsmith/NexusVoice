@@ -3,7 +3,6 @@ from nexusvoice.ai.types import NexusSupportDependencies
 from pydantic_ai import RunContext
 import requests
 
-# TODO: put config in RunContext
 def get_weather(ctx: RunContext[NexusSupportDependencies], city: str, state: Optional[str] = None) -> dict:
     """
     Get current weather information for a specified city.
