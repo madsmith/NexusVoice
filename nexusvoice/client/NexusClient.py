@@ -420,7 +420,7 @@ class NexusVoiceClient:
 
             if self._silence_duration > VAD_SILENCE_DURATION:
                 if self._recording_state.is_recording():
-                    if self._recording_state.is_confirmed():
+                    if self._recording_state.is_processing_speech():
                         logger.debug("Silence detected, stopping recording")
                         self.stopRecording()
                 else:
@@ -439,6 +439,10 @@ class NexusVoiceClient:
                 extra_frames = audio_frames[WAKE_WORD_FRAME_CHUNK:]
                 audio_frames = audio_frames[:WAKE_WORD_FRAME_CHUNK]
                 self._wake_word_buffer.append(extra_frames)
+
+            # Discard frames if we are already recording
+            if self._recording_state.is_recording():
+                return
 
             # oww expects numpy array
             np_audio = np.frombuffer(audio_frames, dtype=NUMPY_AUDIO_FORMAT)
@@ -514,7 +518,7 @@ class NexusVoiceClient:
         if cancel:
             logger.debug("Recording cancelled")
             self._recording_state.stop()
-        elif not self._recording_state.is_confirmed:
+        elif not self._recording_state.is_processing_speech():
             logger.trace("Recording not yet confirmed")
             return
         else:

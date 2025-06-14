@@ -6,23 +6,29 @@ from nexusvoice.utils.state import StateMachine
 class RecState(Enum):
     STOPPED = auto()
     PENDING = auto()
-    RECORDING = auto()
+    ACTIVE_LISTEN = auto()
+    PASSIVE_LISTEN = auto()
 
 class RecEvent(Enum):
     START = auto()
     STOP = auto()
     CONFIRM = auto()
+    LISTEN = auto()
 
 class RecordingState(StateMachine[RecState, RecEvent]):
     TRANSITIONS = {
         RecState.STOPPED: {
             RecEvent.START: RecState.PENDING,
+            RecEvent.LISTEN: RecState.PASSIVE_LISTEN,
         },
         RecState.PENDING: {
-            RecEvent.CONFIRM: RecState.RECORDING,
+            RecEvent.CONFIRM: RecState.ACTIVE_LISTEN,
             RecEvent.STOP: RecState.STOPPED,
         },
-        RecState.RECORDING: {
+        RecState.ACTIVE_LISTEN: {
+            RecEvent.STOP: RecState.STOPPED,
+        },
+        RecState.PASSIVE_LISTEN: {
             RecEvent.STOP: RecState.STOPPED,
         },
     }
@@ -31,25 +37,35 @@ class RecordingState(StateMachine[RecState, RecEvent]):
         super().__init__(initial_state)
         self._lock = threading.Lock()
 
-    def start(self):
+    def on_event(self, event: RecEvent):
         with self._lock:
-            self.on_event(RecEvent.START)
+            super().on_event(event)
+            return self.state
+
+    def start(self):
+        self.on_event(RecEvent.START)
 
     def stop(self):
-        with self._lock:
-            self.on_event(RecEvent.STOP)
+        self.on_event(RecEvent.STOP)
 
     def confirm(self):
-        with self._lock:
-            self.on_event(RecEvent.CONFIRM)
+        self.on_event(RecEvent.CONFIRM)
+
+    def listen(self):
+        self.on_event(RecEvent.LISTEN)
 
     def is_recording(self):
-        with self._lock:
-            return self.state == RecState.RECORDING or self.state == RecState.PENDING
+        return (
+            self.state == RecState.ACTIVE_LISTEN or 
+            self.state == RecState.PASSIVE_LISTEN or
+            self.state == RecState.PENDING 
+        )
 
-    def is_confirmed(self):
-        with self._lock:
-            return self.state == RecState.RECORDING
+    def is_processing_speech(self):
+        return (
+            self.state == RecState.ACTIVE_LISTEN or
+            self.state == RecState.PASSIVE_LISTEN
+        )
 
     def __str__(self):
         return self.state.name
