@@ -36,7 +36,7 @@ dev = [
     "matplotlib>=3.10",
     "scikit-learn>=1.4.0",
     "pytest>=8.3.0",
-    "pytest-asyncio>=0.26.0",
+    "pytest-asyncio>=1.0",
 ]
 
 [build-system]
@@ -45,6 +45,8 @@ build-backend = "setuptools.build_meta"
 
 [tool.pytest.ini_options]
 asyncio_default_fixture_loop_scope = "function"
+log_cli = true
+log_cli_level = "DEBUG"
 
 [tool.setuptools]
 packages = { find = { include = ["nexusvoice*"] } }
