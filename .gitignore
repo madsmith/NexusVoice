@@ -33,6 +33,7 @@ recordings/*.mp3
 recordings/*.wav
 test_cleaned_lms.wav
 samples/delay*.wav
+session.hex
 
 # Ignore build intermediaries
 build
