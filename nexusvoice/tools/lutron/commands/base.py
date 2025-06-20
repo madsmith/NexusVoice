@@ -20,47 +20,27 @@ from typing import (
 )
 from enum import Enum, auto
 
-from ..types import COMMAND_QUERY_PREFIX, COMMAND_EXECUTE_PREFIX, COMMAND_RESPONSE_PREFIX
+from ..types import (
+    ActionT,
+    COMMAND_QUERY_PREFIX,
+    COMMAND_EXECUTE_PREFIX,
+    COMMAND_RESPONSE_PREFIX,
+    LINE_END,
+    CommandDefinition,
+    LutronSpecialEvents,
+    CustomHandlerT,
+    CommandType,
+    CommandError,
+    CommandTimeout
+)
 
 if TYPE_CHECKING:
     from ..lutron import LutronHomeworksClient
 else:
     LutronHomeworksClient = 'LutronHomeworksClient'
 
-class LutronError(Exception):
-    """Base class for Lutron-related errors."""
-    pass
-
-
-class CommandError(LutronError):
-    """Error raised when a command fails."""
-    ERROR_MESSAGES = {
-        1: "Parameter count mismatch",
-        2: "Object does not exist",
-        3: "Invalid action number",
-        4: "Parameter data out of range",
-        5: "Parameter data malformed",
-        6: "Unsupported Command"
-    }
-
-    def __init__(self, error_code: int, command: Optional[str] = None):
-        self.error_code = error_code
-        self.command = command
-        message = self.ERROR_MESSAGES.get(error_code, f"Unknown error: {error_code}")
-        if command:
-            message = f"{message} (command: {command})"
-        super().__init__(message)
-
-
-class CommandTimeout(LutronError):
-    """Error raised when a command times out."""
-    pass
-
-
-class CommandType(Enum):
-    QUERY = auto()
-    EXECUTE = auto()
-    RESPONSE = auto()
+from nexusvoice.core.config import load_config
+config = load_config()
 
 
 class CommandResponseProcessors:
@@ -128,17 +108,10 @@ class CommandResponseProcessors:
             raise ValueError(f"Invalid timezone offset value: {data}") from e
 
 
-# Define a type variable for action enums
-ActionT = TypeVar('ActionT', bound=Union[str, Enum])
-
-# Custom handler type for command response processing
-CustomHandlerT = Callable[[Union[bytes, List[Any]], asyncio.Future, Callable[[], None]], None]
-
-
 class CommandSchema:
     """Schema definition for a command type from a format template."""
     
-    def __init__(self, format_template: str):
+    def __init__(self, format_template: str, commands: List[CommandDefinition]):
         """
         Define a schema for command parsing and formatting.
         
@@ -164,7 +137,11 @@ class CommandSchema:
         
         # Parse template to get field positions
         self.response_index_map: Dict[int, str] = self._parse_template(format_template)
+        self.commands = {cmd.action: cmd for cmd in commands}
         
+    def command_def(self, action: Union[str, Enum]) -> Optional[CommandDefinition]:
+        return self.commands.get(action)
+    
     def _parse_template(self, template: str) -> Dict[int, str]:
         """Parse a template string to extract field positions."""
         index_map = {}
@@ -230,10 +207,20 @@ class LutronCommand(Generic[ActionT]):
     """Base class for Lutron Homeworks commands."""
     
     # Subclasses should define these as class variables
-    schema: ClassVar[CommandSchema] = UnspecifiedCommandSchema()
+    schema: ClassVar[CommandSchema]
+
     response_processors: ClassVar[Dict[Any, Callable[[List[Any]], Any]]] = {}
     
-    def __init__(self, action: Union[str, ActionT], parameters: Optional[List[Any]] = None):
+    def __init_subclass__(cls, schema: CommandSchema, **kwargs):
+        super().__init_subclass__(**kwargs)
+
+        # Ensure schema is defined properly
+        if isinstance(schema, UnspecifiedCommandSchema):
+            raise TypeError("Command schema must be specified for subclass")
+
+        cls.schema = schema
+        
+    def __init__(self, action: Union[str, ActionT]):
         """
         Initialize base command with action and parameters.
         
@@ -241,18 +228,31 @@ class LutronCommand(Generic[ActionT]):
             action: The action to perform (string or enum value)
             parameters: Optional parameters to include with the command
         """
+
         self.action = action
-        self.parameters = parameters or []
+
+        definition = self.schema.command_def(action)
+        if definition is None:
+            raise ValueError(f"Action {action} not found in schema")
+        self.definition: CommandDefinition = definition
+
+        self.processor = self.definition.processor
+        self.no_response = self.definition.no_response
+
+        # Default to query/read until otherwise specified.
+        if self.definition.is_get:
+            self.command_type = CommandType.QUERY
+        elif self.definition.is_set:
+            self.command_type = CommandType.EXECUTE
+        else:
+            raise ValueError(f"Action {action} is not a valid get or set action")
+        
         self.set_params: Optional[List[Any]] = None
-        self.command_type = CommandType.QUERY
         self._logger = logging.getLogger(self.__class__.__name__)
 
         self.custom_event: Optional[str] = None
         self.custom_handler: Optional[CustomHandlerT] = None
         
-        # Ensure schema is defined properly
-        if not hasattr(self, 'schema') or isinstance(self.schema, UnspecifiedCommandSchema):
-            self._logger.warning(f"{self.__class__.__name__} missing schema definition")
 
     @property
     def command_name(self) -> str:
@@ -277,18 +277,28 @@ class LutronCommand(Generic[ActionT]):
         # Use schema for formatting - building from left to right
         result = [self.schema.command_name]
         
+        all_fields_present = True
         schema_map = self.schema.response_index_map
         ordered_fields = [schema_map[key] for key in sorted(schema_map)]
         for field in ordered_fields:
             if not hasattr(self, field):
+                print(f"Field {field} not found")
+                all_fields_present = False
                 break
+
             field_value = getattr(self, field)
             result_value = field_value.value if isinstance(field_value, Enum) else field_value
             result.append(result_value)
             
-        return f"{prefix}{','.join(result)}"
+        if all_fields_present and self.set_params:
+            print(f"Adding set params: {self.set_params}")
+            result.extend(self.set_params)
+        
+        return f"{prefix}{','.join([str(x) for x in result])}"
 
-    def set(self, set_params: Optional[List[str]] = None):
+    def set(self, set_params: Optional[List[Any]] = None):
+        assert self.definition.is_set, f"Action {self.action} is not a valid set action"
+
         self.command_type = CommandType.EXECUTE
         self.set_params = set_params
         return self
@@ -309,11 +319,6 @@ class LutronCommand(Generic[ActionT]):
         Default implementation compares command name and matches each field in the schema
         with values from event_data. Derived classes can override this for special cases.
         """
-        # Early return if we don't have a usable schema
-        if isinstance(self.schema, UnspecifiedCommandSchema):
-            self._logger.warning(f"Cannot match response without schema in {self.__class__.__name__}")
-            return False, []
-        
         # Check for field matches based on schema
         for idx, field_name in enumerate(self.schema.get_field_order()):
             # Skip special fields
@@ -398,11 +403,10 @@ class LutronCommand(Generic[ActionT]):
                        element is the first parameter of the response that does not
                        match a value from the schema that is present in the executed
                        command.
-        """
-        # Find processor for this action
-        processors = self.__class__.response_processors
-        processor = processors[self.action] if self.action in processors else CommandResponseProcessors.passthrough
-            
+        """ 
+        if self.processor is None:
+            raise RuntimeError(f"No processor specified for command {self.action}")
+        
         # Send response data to processor
         try:
             if len(response_data) == 1:
@@ -410,7 +414,7 @@ class LutronCommand(Generic[ActionT]):
             else:
                 processor_args = response_data
             print(f"Processor args: {processor_args}")
-            return processor(processor_args)
+            return self.processor(processor_args)
         except Exception as e:
             self._logger.exception(f"Error processing response: {e}")
             return response_data
@@ -449,7 +453,8 @@ class LutronCommand(Generic[ActionT]):
         error_handler = lambda event_data: self.handle_error(event_data, future, unsubscribe_all)
         
         # Subscribe to relevant events
-        event_tokens.append(lutron_client.subscribe(self.command_name, response_handler))
+        if not self.no_response:
+            event_tokens.append(lutron_client.subscribe(self.command_name, response_handler))
         event_tokens.append(lutron_client.subscribe("ERROR", error_handler))
         
         if self.custom_handler is not None:
@@ -465,7 +470,6 @@ class LutronCommand(Generic[ActionT]):
             await lutron_client.send_command(formatted_command)
         except Exception as e:
             # If command sending fails, set the exception on the future
-            print(e)
             import traceback
             traceback.print_exc()
             unsubscribe_all()
@@ -473,11 +477,16 @@ class LutronCommand(Generic[ActionT]):
         
         # Set up timeout handling
         timeout_task = None
+        if self.no_response:
+            timeout = config.get('tools.lutron.command.no_response_timeout', 0.2)
         
         async def handle_timeout():
             try:
                 await asyncio.sleep(timeout)
-                if not future.done():
+                if self.no_response:
+                    unsubscribe_all()
+                    future.set_result(None)
+                elif not future.done():
                     unsubscribe_all()
                     future.set_exception(CommandTimeout(f"Command {formatted_command} timed out after {timeout}s"))
             except asyncio.CancelledError:

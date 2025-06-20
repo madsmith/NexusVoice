@@ -102,7 +102,6 @@ class LutronHomeworksClient:
         try:
             while not buf.endswith(end_bytes):
                 chunk = await asyncio.wait_for(self.reader.read(1), timeout=timeout)
-                print(f"CHUNK: {chunk} [{hex(chunk[0])}]")
                 if not chunk:
                     raise ConnectionError("Connection closed by server.")
 

@@ -4,30 +4,34 @@ import pytest_asyncio
 import unittest.mock as mock
 from typing import Dict, List, Any, Optional
 
-from nexusvoice.tools.lutron.commands.base import (
-    LutronCommand, 
-    CommandSchema,
+from nexusvoice.tools.lutron.types import (
     CommandType,
     CommandError,
     CommandTimeout,
     COMMAND_QUERY_PREFIX, 
     COMMAND_EXECUTE_PREFIX,
     COMMAND_RESPONSE_PREFIX,
-    CommandResponseProcessors
+)
+
+from nexusvoice.tools.lutron.commands.base import (
+    LutronCommand,
+    CommandDefinition as Cmd,
+    CommandSchema,
+    CommandError,
+    CommandTimeout,
 )
 from nexusvoice.tools.lutron.lutron import LutronHomeworksClient, SubscriptionToken, EventT
 
+    
+cmds = [
+    Cmd("STATUS", lambda data: {"status": data}),
+    Cmd("INFO", lambda data: {"info": data}),
+]
+schema = CommandSchema(format_template="TEST,{action},{param1},{param2}", commands=cmds)
 
 # Test command implementation for testing
-class TestCommand(LutronCommand[str]):
+class TestCommand(LutronCommand[str], schema=schema):
     """A test implementation of LutronCommand for testing"""
-    
-    schema = CommandSchema(format_template="TEST,{action},{param1},{param2}")
-    
-    response_processors = {
-        "STATUS": lambda data: {"status": data},
-        "INFO": lambda data: {"info": data}
-    }
     
     def __init__(self, action: str, param1: str, param2: str):
         super().__init__(action)
@@ -125,14 +129,16 @@ def test_process_response():
     result = cmd.process_response(["OK"])
     assert result == {"status": "OK"}
     
-    cmd.action = "INFO"
+    cmd = TestCommand("INFO", "1", "2")
     result = cmd.process_response(["Version", "1.2.3"])
     assert result == {"info": ["Version", "1.2.3"]}
     
     # Test fallback to default processor
-    cmd.action = "UNKNOWN"
-    result = cmd.process_response(["Some", "Data"])
-    assert result == ["Some", "Data"]  # Default passthrough
+    try:
+        cmd = TestCommand("UNKNOWN", "1", "2")
+        assert False, "Expected exception"
+    except Exception as e:
+        assert True, f"Expected exception: {e}"
 
 @pytest.mark.asyncio
 async def test_command_execution_success():

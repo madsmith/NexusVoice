@@ -5,7 +5,8 @@ from typing import Any, Callable, Dict, Optional, Union, List, ClassVar
 
 from nexusvoice.tools.lutron.types import LutronSpecialEvents
 
-from .base import CommandResponseProcessors, LutronCommand, CommandType, CommandSchema
+from nexusvoice.tools.lutron.types import CommandDefinition as Cmd
+from .base import CommandResponseProcessors, LutronCommand, CommandSchema
 
 
 class SystemAction(Enum):
@@ -19,26 +20,21 @@ class SystemAction(Enum):
     OS_REV = "8"        # Get OS revision
     LOAD_SHED = "11"    # Set load shed
 
-# Default response processors for system actions - maps each action to its response processor
-system_response_processors = {
-    SystemAction.TIME: CommandResponseProcessors.to_time,
-    SystemAction.DATE: CommandResponseProcessors.to_date,
-    SystemAction.LATLONG: CommandResponseProcessors.to_latlong,
-    SystemAction.TIMEZONE: CommandResponseProcessors.to_timezone,
-    SystemAction.SUNSET: CommandResponseProcessors.to_time,
-    SystemAction.SUNRISE: CommandResponseProcessors.to_time,
-    SystemAction.OS_REV: CommandResponseProcessors.passthrough,
-    SystemAction.LOAD_SHED: CommandResponseProcessors.to_int,
-}
+system_command_definitions = [
+    Cmd(SystemAction.TIME, CommandResponseProcessors.to_time),
+    Cmd(SystemAction.DATE, CommandResponseProcessors.to_date),
+    Cmd(SystemAction.LATLONG, CommandResponseProcessors.to_latlong),
+    Cmd(SystemAction.TIMEZONE, CommandResponseProcessors.to_timezone),
+    Cmd.GET(SystemAction.SUNSET, CommandResponseProcessors.to_time),
+    Cmd.GET(SystemAction.SUNRISE, CommandResponseProcessors.to_time),
+    Cmd.GET(SystemAction.OS_REV, CommandResponseProcessors.passthrough),
+    Cmd.SET(SystemAction.LOAD_SHED, CommandResponseProcessors.to_int),
+]
 
-class SystemCommand(LutronCommand[SystemAction]):
+schema = CommandSchema("SYSTEM,{action}", system_command_definitions)
+
+class SystemCommand(LutronCommand[SystemAction], schema=schema):
     """Command for Lutron Homeworks system-level operations."""
-    
-    # Define the command schema with format template
-    schema = CommandSchema("SYSTEM,{action},{value}")
-    
-    # Define response processors for each action
-    response_processors = system_response_processors
     
     def __init__(self, action: Union[str, SystemAction], parameters: Optional[List[Any]] = None):
         """
@@ -57,7 +53,7 @@ class SystemCommand(LutronCommand[SystemAction]):
             except ValueError:
                 raise ValueError(f"Invalid system action: {action}")
                 
-        super().__init__(action=system_action, parameters=parameters)
+        super().__init__(action=system_action)
 
         if self.action == SystemAction.OS_REV:
             self.custom_event = LutronSpecialEvents.NonResponseEvents.value
