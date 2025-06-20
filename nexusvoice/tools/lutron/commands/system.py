@@ -36,7 +36,7 @@ schema = CommandSchema("SYSTEM,{action}", system_command_definitions)
 class SystemCommand(LutronCommand[SystemAction], schema=schema):
     """Command for Lutron Homeworks system-level operations."""
     
-    def __init__(self, action: Union[str, SystemAction], parameters: Optional[List[Any]] = None):
+    def __init__(self, action: Union[str, SystemAction]):
         """
         Initialize a system command.
         

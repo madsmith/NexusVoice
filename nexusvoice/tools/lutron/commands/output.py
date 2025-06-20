@@ -24,7 +24,7 @@ schema = CommandSchema("OUTPUT,{iid},{action}", output_command_definitions)
 
 class OutputCommand(LutronCommand[OutputAction], schema=schema):
 
-    def __init__(self, iid: int, action: Union[str, OutputAction], parameters: Optional[List[Any]] = None):
+    def __init__(self, iid: int, action: Union[str, OutputAction]):
         """
         Initialize an output command.
         
@@ -74,4 +74,4 @@ class OutputCommand(LutronCommand[OutputAction], schema=schema):
     @classmethod
     def set_pulse_time(cls, iid: int, pulse_time: int) -> 'OutputCommand':
         """Set the pulse time."""
-        return cls(iid, OutputAction.PULSE_TIME, [pulse_time])
+        return cls(iid, OutputAction.PULSE_TIME).set([pulse_time])

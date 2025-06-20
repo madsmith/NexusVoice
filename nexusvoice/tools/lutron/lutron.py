@@ -274,6 +274,9 @@ class LutronHomeworksClient:
         print("Closing Lutron client...")
 
         self._stop_event.set()
+
+        if self.command_ready:
+            await self.send_command("LOGOUT")
         
         # Cancel background tasks
         tasks_to_cancel = []
