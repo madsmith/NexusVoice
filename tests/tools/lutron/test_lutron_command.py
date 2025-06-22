@@ -30,7 +30,7 @@ cmds = [
 schema = CommandSchema(format_template="TEST,{action},{param1},{param2}", commands=cmds)
 
 # Test command implementation for testing
-class TestCommand(LutronCommand[str], schema=schema):
+class MockCommand(LutronCommand[str], schema=schema):
     """A test implementation of LutronCommand for testing"""
     
     def __init__(self, action: str, param1: str, param2: str):
@@ -89,7 +89,7 @@ class MockLutronClient:
 
 def test_command_initialization():
     """Test basic command initialization"""
-    cmd = TestCommand("STATUS", "1", "2")
+    cmd = MockCommand("STATUS", "1", "2")
     assert cmd.action == "STATUS"
     assert cmd.param1 == "1"
     assert cmd.param2 == "2"
@@ -97,7 +97,7 @@ def test_command_initialization():
     
 def test_command_formatting():
     """Test command string formatting"""
-    cmd = TestCommand("STATUS", "1", "2")
+    cmd = MockCommand("STATUS", "1", "2")
     assert cmd.formatted_command == f"{COMMAND_QUERY_PREFIX}TEST,STATUS,1,2"
     
     # Test execute command formatting
@@ -108,7 +108,7 @@ def test_command_formatting():
     
 def test_matches_response():
     """Test response matching logic"""
-    cmd = TestCommand("STATUS", "1", "2")
+    cmd = MockCommand("STATUS", "1", "2")
     
     # Exact match
     matches, unmatched = cmd._matches_response(["STATUS", "1", "2", "extra_data"])
@@ -125,17 +125,17 @@ def test_matches_response():
     
 def test_process_response():
     """Test response processing"""
-    cmd = TestCommand("STATUS", "1", "2")
+    cmd = MockCommand("STATUS", "1", "2")
     result = cmd.process_response(["OK"])
     assert result == {"status": "OK"}
     
-    cmd = TestCommand("INFO", "1", "2")
+    cmd = MockCommand("INFO", "1", "2")
     result = cmd.process_response(["Version", "1.2.3"])
     assert result == {"info": ["Version", "1.2.3"]}
     
     # Test fallback to default processor
     try:
-        cmd = TestCommand("UNKNOWN", "1", "2")
+        cmd = MockCommand("UNKNOWN", "1", "2")
         assert False, "Expected exception"
     except Exception as e:
         assert True, f"Expected exception: {e}"
@@ -143,7 +143,7 @@ def test_process_response():
 @pytest.mark.asyncio
 async def test_command_execution_success():
     """Test successful command execution"""
-    cmd = TestCommand("STATUS", "1", "2")
+    cmd = MockCommand("STATUS", "1", "2")
     
     # Setup mock with successful response
     mock_client = MockLutronClient(
@@ -159,7 +159,7 @@ async def test_command_execution_success():
 @pytest.mark.asyncio
 async def test_command_execution_error():
     """Test command execution with error response"""
-    cmd = TestCommand("STATUS", "1", "2")
+    cmd = MockCommand("STATUS", "1", "2")
     
     # Setup mock with error response
     mock_client = MockLutronClient(
@@ -175,7 +175,7 @@ async def test_command_execution_error():
 @pytest.mark.asyncio
 async def test_command_timeout():
     """Test command execution timeout"""
-    cmd = TestCommand("STATUS", "1", "2")
+    cmd = MockCommand("STATUS", "1", "2")
     
     # Setup mock with no responses
     mock_client = MockLutronClient()
@@ -187,7 +187,7 @@ async def test_command_timeout():
 @pytest.mark.asyncio        
 async def test_multiple_responses():
     """Test handling multiple responses"""
-    cmd = TestCommand("STATUS", "1", "2")
+    cmd = MockCommand("STATUS", "1", "2")
     
     # Setup mock with multiple responses
     mock_client = MockLutronClient(
@@ -203,7 +203,7 @@ async def test_multiple_responses():
 @pytest.mark.asyncio
 async def test_connection_error():
     """Test handling connection error"""
-    cmd = TestCommand("STATUS", "1", "2")
+    cmd = MockCommand("STATUS", "1", "2")
     
     # Setup mock that raises connection error
     mock_client = MockLutronClient()
