@@ -91,6 +91,10 @@ tools:
     port: 23
     username: ${private.lutron.username}
     password: ${private.lutron.password}
+    valid_object_types: []
+    filters: {
+      name_replace: []
+    }
 llm:
   name: "Llama-3.2"
   model: meta-llama/Llama-3.2-3B-Instruct
