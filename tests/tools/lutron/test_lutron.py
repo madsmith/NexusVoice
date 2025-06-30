@@ -28,9 +28,9 @@ async def lutron_client():
 
     client = LutronHomeworksClient(
         host=host,
-        port=port,
         username=username,
         password=password,
+        port=port,
         keepalive_interval=keepalive_interval,
     )
 

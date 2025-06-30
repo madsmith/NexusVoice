@@ -1,3 +1,4 @@
+from logging import basicConfig
 import os
 from typing import Literal
 import warnings
@@ -22,8 +23,10 @@ def configure_logfire(environment_mode: Literal['DEV', 'PROD'], service_name: st
     # Determine if running client/main or some other script
     logfire_instance = logfire.configure(service_name=service_name, environment=environment_mode)
     logfire_instance.instrument_pydantic_ai()
+    logfire_instance.instrument_requests()
     logfire_instance.instrument_httpx(capture_all=True)
     logfire_instance.install_auto_tracing(modules=['nexusvoice.ai'], min_duration=0.001)
+    basicConfig(handlers=[logfire.LogfireLoggingHandler()])
 
 def bootstrap(environment_mode: Literal['DEV', 'PROD'], service_name: str = "NexusVoice"):
     setup_environment(environment_mode)

@@ -91,7 +91,9 @@ tools:
     port: 23
     username: ${private.lutron.username}
     password: ${private.lutron.password}
+    database_path: ${private.lutron.database_path}
     valid_object_types: []
+    type_map: {}
     filters: {
       name_replace: []
     }

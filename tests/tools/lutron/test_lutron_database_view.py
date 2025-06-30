@@ -6,7 +6,7 @@ import xml.etree.ElementTree as ET
 
 from nexusvoice.core.config import NexusConfig, load_config
 from nexusvoice.tools.lutron.database.database import LutronDatabase
-from nexusvoice.tools.lutron.database.view import LutronDatabaseView, LutronArea
+from nexusvoice.tools.lutron.database.view import LutronAreaGroup, LutronDatabaseView, LutronArea, LutronOutput, LutronEntity
 
 actual_config = load_config()
 
@@ -18,28 +18,7 @@ class TestLutronDatabaseView(unittest.TestCase):
         # Create a temporary directory and database
         self.tempdir = tempfile.TemporaryDirectory()
         self.db = LutronDatabase("test_server", self.tempdir.name)
-        
-        # Create mock config
-        def config_get_side_effect(key, default=None):
-            config_data = {
-                "tools.lutron.valid_object_types": ["Area", "Output"],
-                "tools.lutron.filters": {
-                    "name_replace": [
-                        ["Rom", "Room"],
-                        ["2nd", "Second"],
-                        ["Mstr", "Master"],
-                    ],
-                },
-            }
-            return config_data.get(key, default)
-        
-        self.config = mock.MagicMock(spec=NexusConfig)
-        self.config.get.side_effect = config_get_side_effect
-        
-        # Create the view
-        self.view = LutronDatabaseView(self.config, self.db)
-        self.view.initialize()
-        
+
         # Sample XML data with nested areas
         self.sample_areas_xml = """
             <Project>
@@ -95,16 +74,41 @@ class TestLutronDatabaseView(unittest.TestCase):
                 </Areas>
             </Project>
         """.encode('utf-8')
+
+        self.db._process_xml(self.sample_areas_xml)
+        
+        # Create mock config
+        def config_get_side_effect(key, default=None):
+            config_data = {
+                "tools.lutron.valid_object_types": ["Area", "Output"],
+                "tools.lutron.type_map": {
+                    'Light': ['INC'],
+                    'Shade': ['SYSTEM_SHADE']
+                },
+                "tools.lutron.filters": {
+                    "name_replace": [
+                        ["Rom", "Room"],
+                        ["2nd", "Second"],
+                        ["Mstr", "Master"],
+                    ],
+                },
+            }
+            return config_data.get(key, default)
+        
+        self.config = mock.MagicMock(spec=NexusConfig)
+        self.config.get.side_effect = config_get_side_effect
+        
+        # Create the view
+        self.view = LutronDatabaseView(self.config, self.db)
+        self.view.initialize()
+        
     
     def tearDown(self):
         """Clean up temporary files."""
         self.tempdir.cleanup()
 
     def test_get_areas(self):
-        """Test that getAreas returns the expected data structure."""
-        # Process the sample XML data into the database
-        self.db._process_xml(self.sample_areas_xml)
-        
+        """Test that getAreas returns the expected data structure."""        
         # Get areas from both the database and the view
         db_areas = self.db.getAreas()
         view_areas = self.view.getAreas()
@@ -116,22 +120,19 @@ class TestLutronDatabaseView(unittest.TestCase):
         self.assertIsInstance(view_areas[0], LutronArea)
         self.assertEqual(view_areas[0].iid, db_areas[1]['iid'])
         self.assertNotEqual(view_areas[0].name, db_areas[1]['name'])
-        self.assertIn("001 Living Room", view_areas[0].name)
+        self.assertIn("Living Room", view_areas[0].name)
 
         found_iids = [area.iid for area in view_areas]
         expected_iids = [area['iid'] for area in db_areas if area['is_leaf']]
         self.assertEqual(found_iids, expected_iids)
 
         names = [area.name for area in view_areas]
-        self.assertIn("001 Living Room", names, "Filter fixed area name")
-        self.assertIn("002 Kitchen", names, "Filter fixed area name")
-        self.assertNotIn("200 2nd Floor", names, "Filter fixed area name")
+        self.assertIn("Living Room", names, "Filter fixed area name")
+        self.assertIn("Kitchen", names, "Filter fixed area name")
+        self.assertNotIn("Second Floor", names, "Filter fixed area name")
 
     def test_get_areas_include_parents(self):
         """Test that getAreas returns the expected data structure when include_parents is True."""
-        # Process the sample XML data into the database
-        self.db._process_xml(self.sample_areas_xml)
-        
         # Get areas from both the database and the view
         db_areas = self.db.getAreas()
         view_areas = self.view.getAreas(include_parents=True)
@@ -143,20 +144,18 @@ class TestLutronDatabaseView(unittest.TestCase):
         self.assertIsInstance(view_areas[1], LutronArea)
         self.assertEqual(view_areas[1].iid, db_areas[1]['iid'])
         self.assertNotEqual(view_areas[1].name, db_areas[1]['name'])
-        self.assertEqual("001 Living Room", view_areas[1].name)
+        self.assertEqual("Living Room", view_areas[1].name)
 
-        found_iids = [area.iid for area in view_areas]
-        expected_iids = [area['iid'] for area in db_areas]
+        found_iids = [area.iid for area in view_areas if isinstance(area, LutronArea)]
+        expected_iids = [area['iid'] for area in db_areas if area['is_leaf']]
         self.assertEqual(found_iids, expected_iids)
 
         names = [area.name for area in view_areas]
-        self.assertIn("001 Living Room", names, "Filter fixed area name")
-        self.assertIn("002 Kitchen", names, "Filter fixed area name")
-        self.assertIn("200 Second Floor", names, "Filter fixed area name")
+        self.assertIn("Living Room", names, "Filter fixed area name")
+        self.assertIn("Kitchen", names, "Filter fixed area name")
+        self.assertIn("Second Floor", names, "Filter fixed area name")
     
     def test_get_entities(self):
-        self.db._process_xml(self.sample_areas_xml)
-        
         entities = self.view.getEntities()
         for entity in entities:
             print(entity)
@@ -170,7 +169,14 @@ class TestLutronDatabaseViewWithData(unittest.TestCase):
         # Create a temporary directory and database
         self.tempdir = tempfile.TemporaryDirectory()
         self.db = LutronDatabase("test_server", self.tempdir.name)
-        
+
+        # Load XML data from file
+        with open("tests/tools/lutron/DbXmlInfo.xml", "rb") as f:
+            self.xml_data = f.read()
+
+        self.db._process_xml(self.xml_data)
+
+    
         # Create mock config
         self.config = actual_config
         
@@ -178,24 +184,19 @@ class TestLutronDatabaseViewWithData(unittest.TestCase):
         self.view = LutronDatabaseView(self.config, self.db)
         self.view.initialize()
         
-        # Load XML data from file
-        with open("tests/tools/lutron/DbXmlInfo.xml", "rb") as f:
-            self.xml_data = f.read()
     
     def tearDown(self):
         """Clean up temporary files."""
         # Show tempdir contents
-        print("Tempdir contents:")
-        import os
-        for file in os.listdir(self.tempdir.name):
-            print(file)
-        copyfile(self.tempdir.name + "/lutron_config.db", "tests/tools/lutron/lutron_config.db")
+        # print("Tempdir contents:")
+        # import os
+        # for file in os.listdir(self.tempdir.name):
+        #     print(file)
+        # copyfile(self.tempdir.name + "/lutron_config.db", "tests/tools/lutron/lutron_config.db")
         self.tempdir.cleanup()
 
     def test_get_entities(self):
         """Test that getEntities returns the expected data structure with actual XML data."""
-        self.db._process_xml(self.xml_data)
-        
         entities = self.view.getEntities()
         for entity in entities:
             print(entity)
@@ -203,12 +204,34 @@ class TestLutronDatabaseViewWithData(unittest.TestCase):
 
 
     def test_get_iid_map(self):
-        self.db._process_xml(self.xml_data)
-        
         iid_map = self.db.getIIDMap()
         for iid, map_record in iid_map.items():
             print(f"{iid}:[{map_record['type']}] {map_record['parent_iid']} ({map_record['parent_type']})")
 
+    def test_get_areas(self):
+        areas = self.view.getAreas()
+
+        count_area_groups = len([area for area in areas if isinstance(area, LutronAreaGroup)])
+        self.assertEqual(count_area_groups, 0)
+        self.assertGreater(len(areas), 0)
+        area = areas[0]
+        self.assertIsInstance(area, LutronArea)
+
+        areas = self.view.getAreas(include_parents=True)
+        count_area_groups = len([area for area in areas if isinstance(area, LutronAreaGroup)])
+        self.assertEqual(count_area_groups, 5)
+        for area in areas:
+            print(area)
+
+    def test_get_outputs(self):
+        outputs = self.view.getOutputs()
+
+        for output in outputs:
+            print(output)
+
+        self.assertGreater(len(outputs), 0)
+        output = outputs[0]
+        self.assertIsInstance(output, LutronOutput)
 
 if __name__ == "__main__":
     unittest.main()

@@ -2,6 +2,7 @@ import os
 import tempfile
 import unittest
 import sqlite3
+from shutil import copyfile
 from unittest import mock
 from datetime import datetime, timedelta
 from nexusvoice.core.config import load_config
@@ -73,7 +74,10 @@ class TestLutronDatabase(unittest.TestCase):
             mock_response.status_code = 200
             
             # Create sample XML with timestamp
-            timestamp_xml = b'<?xml version="1.0"?>\n<DbInfo>\n<DbExportDate>06/20/2025</DbExportDate><DbExportTime>12:30:45</DbExportTime>\n</DbInfo>'
+            now = datetime.now()
+            date_bytes = now.strftime("%m/%d/%Y").encode('utf-8')
+            time_bytes = now.strftime("%H:%M:%S").encode('utf-8')
+            timestamp_xml = b'<?xml version="1.0"?>\n<DbInfo>\n<DbExportDate>' + date_bytes + b'</DbExportDate><DbExportTime>' + time_bytes + b'</DbExportTime>\n</DbInfo>'
             mock_response.__enter__.return_value = mock_response
             mock_response.iter_content.return_value = [timestamp_xml]
             mock_get.return_value = mock_response
@@ -86,7 +90,7 @@ class TestLutronDatabase(unittest.TestCase):
                 self.assertIsNotNone(xml)
             
             # Test with older import time
-            old_time = (datetime.now() - timedelta(days=1)).isoformat()
+            old_time = (now - timedelta(days=1)).isoformat()
             with mock.patch.object(self.database, 'getInfo', return_value=old_time):
                 needs_update, xml = self.database.checkServerLoad()
                 self.assertTrue(needs_update)
@@ -187,8 +191,17 @@ class TestLutronDatabase(unittest.TestCase):
 
 @pytest.fixture
 def database():
-    db = LutronDatabase(config.get("tools.lutron.host"))
+    tempdir = tempfile.TemporaryDirectory()
+
+    # Copy the sample XML file to the temporary directory
+    sample_xml_path = os.path.join(os.path.dirname(__file__), "DbXmlInfo.xml")
+    copyfile(sample_xml_path, os.path.join(tempdir.name, "DbXmlInfo.xml"))
+
+    db = LutronDatabase(config.get("tools.lutron.host"), tempdir.name)
+
     yield db
+
+    tempdir.cleanup()
 
 def test_load_database(database: LutronDatabase):
     xml = database.loadDatabase()

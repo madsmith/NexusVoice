@@ -8,11 +8,11 @@ dependencies = [
     "accelerate==1.6.0",
     "datasets==3.5.0",
     "numpy~=2.2",
-    "openwakeword==0.6.0",
     "kokoro>=0.9.4",
     "pyaudio~=0.2",
     "openai~=1.65",
     "omegaconf>=2.3",
+    "openwakeword==0.6.0",
     "pydub~=0.25",
     "pydantic>=2.11.2",
     "pydantic-ai>=0.2.11",
@@ -24,7 +24,9 @@ dependencies = [
     "transformers~=4.49",
     "webrtcvad~=2.0",
     "speexdsp-ns @ https://github.com/madsmith/speexdsp-python/releases/download/0.1.2/speexdsp_ns-0.1.2-cp312-cp312-macosx_15_0_arm64.whl",
-    "logfire[httpx]>=3.17.0",
+    "logfire[httpx,requests]>=3.17.0",
+    "fastmcp>=2.9.2",
+    "opentelemetry-instrumentation-requests>=0.54b1",
 ]
 
 [project.scripts]

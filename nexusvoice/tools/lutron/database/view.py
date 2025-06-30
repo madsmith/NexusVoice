@@ -7,6 +7,10 @@ from nexusvoice.core.config import NexusConfig
 from .database import LutronDatabase
 
 @dataclass
+class LutronAreaGroup:
+    name: str
+    
+@dataclass
 class LutronArea:
     iid: int
     name: str
@@ -18,11 +22,20 @@ class LutronArea:
 @dataclass
 class LutronOutput:
     iid: int
+    output_type: str
     name: str
+    path: str
 
-    @classmethod
-    def from_dict(cls, data):
-        return cls(data['iid'], data['name'])
+@dataclass
+class LutronDBEntity:
+    id: int
+    iid: int
+    name: str
+    spoken_name: str | None
+    type: str
+    subtype: str | None
+    path: str
+    parent_id: int | None
 
 @dataclass
 class LutronEntity:
@@ -39,6 +52,10 @@ class LutronEntity:
         spoken_name = data['spoken_name'] if 'spoken_name' in data else None
         return cls(data['iid'], data['name'], spoken_name, data['type'], subtype, data['path'])
     
+    @classmethod
+    def from_db_entity(cls, entity: LutronDBEntity):
+        return cls(entity.iid, entity.name, entity.spoken_name, entity.type, entity.subtype, entity.path)
+    
     def __str__(self):
         return f"[{self.type}] {"(" +str(self.iid) + ")":<6} {self.name:<38} => {self.spoken_name:<20}"
 
@@ -52,7 +69,13 @@ class ObjectHolder:
     def __post_init__(self):
         type(self)._counter += 1
         self.id = type(self)._counter
-        
+
+@dataclass
+class IIDMapRecord:
+    id: int
+    object: ObjectHolder
+    parent: int | None
+
 class LutronDatabaseView:
     _available_filters = {}
     
@@ -65,6 +88,8 @@ class LutronDatabaseView:
         self.database = database
         self._filters = []
         self.logger = logging.getLogger(self.__class__.__name__)
+        self._entities: dict[int, LutronDBEntity] = {}
+        self._id_map: dict[int, IIDMapRecord] = {}
 
     def initialize(self):
         # Initialize filters based on config and available filters
@@ -76,13 +101,25 @@ class LutronDatabaseView:
             
             for filter_rule in filter_rules:
                 self._filters.append(filter_class(*filter_rule))
+
+        self._process_database()
+
         return self
 
-    def getEntities(self):
+    def _process_database(self):
+        # Load data from the database
         db_iid_map = self.database.getIIDMap()
+        # Play objects in ObjectHolder so they all have a distinct ID
         areas = [ObjectHolder(area) for area in self.database.getAreas()]
         outputs = [ObjectHolder(output) for output in self.database.getOutputs()]
+        
+        # Rebuild iid_map on DataHolder using each objects DataHolder.id
+        self._rebuild_iid_map(db_iid_map, areas, outputs)
 
+        # Rebuild entities
+        self._rebuild_entities(areas, outputs)
+        
+    def _rebuild_iid_map(self, db_iid_map, areas: list[ObjectHolder], outputs: list[ObjectHolder]):
         def find_object(iid, name):
             obj = None
             for area in areas:
@@ -95,16 +132,12 @@ class LutronDatabaseView:
                         obj = output
                         break
             return obj
-        
-        # Rebuild iid_map on DataHolder using each objects DataHolder.id
+
         iid_map = {}
-        print("Building new iid_map")
         for record in db_iid_map.values():
             obj_type = record['type']
             if obj_type not in self.config.get("tools.lutron.valid_object_types"):
-                print(f"Skipping invalid type: {obj_type}")
                 continue
-            print(record)
             obj = find_object(record['iid'], record['name'])
             if obj is None:
                 raise ValueError(f"No object found for: {record['iid']} {record['name']} {record['type']}")
@@ -114,48 +147,51 @@ class LutronDatabaseView:
                 if parent is None:
                     raise ValueError(f"No parent found for: {record['parent_iid']} {record['parent_name']} {record['parent_type']}")
             else:
-                print(f"No parent found for: {record['iid']} {record['name']} {record['type']}")
+                pass
 
             parent_id = parent.id if parent is not None else None
-            print(f"Mapping {obj.value['name']} ({obj.value['iid']}) @ {obj.id} to {parent_id}")
-            iid_map[obj.id] = {
-                "object": obj,
-                "parent": parent_id
-            }
-
-        entities = []
+            iid_map[obj.id] = IIDMapRecord(obj.id, obj, parent_id)
+        
+        self._id_map = iid_map
+        
+    def _rebuild_entities(self, areas: list[ObjectHolder], outputs: list[ObjectHolder]) -> None:
+        entities = {}
         for object_type, objects in {"Area": areas, "Output": outputs}.items():
             for obj in objects:
                 current_obj = obj.value
-                print("Current", current_obj)
-                path = self._build_path(obj, iid_map)
+                object_id = obj.id
+                id_record = self._id_map.get(obj.id)
+                if id_record is None:
+                    raise ValueError(f"No ID record found for: {obj.id}")
+                parent_id = id_record.parent
+                path = self._build_path(obj)
                 current_obj = self._applyFilters(current_obj)
                 spoken_name = self._constructSpokenName(current_obj)
-                subtype = current_obj['subtype'] if 'subtype' in current_obj else None
-                entities.append(LutronEntity(
+                subtype = current_obj['type'] if 'type' in current_obj else None
+                entities[object_id] = LutronDBEntity(
+                    object_id,
                     current_obj['iid'],
                     current_obj['name'],
                     spoken_name,
                     object_type,
                     subtype,
                     self._path_to_string(path),
-                ))
-        return entities
+                    parent_id,
+                )
 
-    def _build_path(self, obj: ObjectHolder, iid_map: dict[int, dict]) -> list[dict]:
-        print(f"Building path for {obj.value['name']} ({obj.value['iid']})")
+        self._entities = entities
 
+    def _build_path(self, obj: ObjectHolder) -> list[dict]:
         path = []
 
-        record: dict | None = iid_map.get(obj.id)
+        record: IIDMapRecord | None = self._id_map.get(obj.id)
         while record is not None:
-            print("  Record", record)
-            path.insert(0, record['object'].value)
+            path.insert(0, record.object.value)
 
-            parent_id = record['parent']
+            parent_id = record.parent
             if parent_id is None:
                 break
-            record = iid_map.get(parent_id)
+            record = self._id_map.get(parent_id)
         
         return path
 
@@ -163,7 +199,6 @@ class LutronDatabaseView:
         return " / ".join([self._constructSpokenName(obj) for obj in path])
     
     def _applyFilters(self, data: dict):
-        print(f"Applying filters to {data['name']} ({data['iid']})")
         for filter in self._filters:
             data = filter(data)
         return data
@@ -184,33 +219,61 @@ class LutronDatabaseView:
         name = name.strip()
 
         return name
-        
-    def getAreas(self, include_parents=False):
-        areas = self.database.getAreas()
-        filtered_areas = self.filterAreas(areas, include_parents)
-        return filtered_areas
+    
+    def _mapType(self, entity: LutronDBEntity):
+        # TODO: Index type_map by type for faster lookup
+        for result_type, type_list in self.config.get("tools.lutron.type_map").items():
+            if entity.subtype in type_list:
+                return result_type
+        return None
+    
+    def getEntities(self) -> list[LutronEntity]:
+        result = []
+        for entity in self._entities.values():
+            iid = entity.iid
+            name = entity.name
+            spoken_name = entity.spoken_name or entity.name
+            path = entity.path
+            output_type = self._mapType(entity)
 
-    def filterAreas(self, areas, include_parents=False):
-        results = []
-        for area in areas:
+            # Filter out unmapped output types
+            if entity.type == "Output" and output_type is None:
+                continue
+
+            result.append(LutronEntity(iid, name, spoken_name, entity.type, output_type, path))
+        return result
+    
+    def getAreas(self, include_parents=False):
+        result = []
+        for area in self.database.getAreas():
             if area['is_leaf'] or include_parents:
                 area = self._applyFilters(area)
-                obj = LutronArea.from_dict(area)
-                results.append(obj)
-        return results
+                spoken_name = self._constructSpokenName(area)
+                if area['is_leaf']:
+                    iid = area['iid']
+                    obj = LutronArea(iid, spoken_name)
+                    result.append(obj)
+                else:
+                    obj = LutronAreaGroup(spoken_name)
+                    result.append(obj)
+        return result
 
-    def getOutputs(self):
-        outputs = self.database.getOutputs()
-
-        filtered_outputs = self.filterOutputs(outputs)
-        return filtered_outputs
-
-    def filterOutputs(self, outputs):
+    def getOutputs(self) -> list[LutronOutput]:
         results = []
-        for output in outputs:
-            output = self._applyFilters(output)
-            obj = LutronOutput.from_dict(output)
-            results.append(obj)
+        
+        for entity in self._entities.values():
+            if entity.type == "Output":
+                iid = entity.iid
+                spoken_name = entity.spoken_name or entity.name
+                path = entity.path
+                output_type = self._mapType(entity)
+
+                # Filter out unmapped output types
+                if output_type is None:
+                    continue
+
+                obj = LutronOutput(iid, output_type, spoken_name, path)
+                results.append(obj)
         return results
 
 
@@ -230,3 +293,43 @@ class NameReplaceFilter(Filter, filter_name='name_replace'):
     def __call__(self, data: dict) -> dict:
         data['name'] = data['name'].replace(self.old_fragment, self.new_fragment)
         return data
+
+class PreserveNumberFilter(Filter, filter_name='preserve_number'):
+    known_numbers = {
+        '0': 'Zero',
+        '1': 'One',
+        '2': 'Two',
+        '3': 'Three',
+        '4': 'Four',
+        '5': 'Five',
+        '6': 'Six',
+        '7': 'Seven',
+        '8': 'Eight',
+        '9': 'Nine',
+    }
+
+    def __init__(self, name_match: str):
+        self.name_match = name_match
+    
+    @classmethod
+    def number_replacer(cls, match: re.Match) -> str:
+        number = match.group(0)
+        return cls.known_numbers[number] if number in cls.known_numbers else number
+    
+    def __call__(self, data: dict) -> dict:
+        assert isinstance(data['name'], str)
+        if self.name_match in data['name']:
+            # Find the number in the name and replace with lookup table
+            data['name'] = re.sub(r'\d+', self.number_replacer, data['name'])
+        return data
+
+class TypeFixFilter(Filter, filter_name='type_fix'):
+    def __init__(self, name_match: str, type: str):
+        self.name_match = name_match
+        self.type = type
+    
+    def __call__(self, data: dict) -> dict:
+        if self.name_match in data['name']:
+            data['type'] = self.type
+        return data
+        

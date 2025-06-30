@@ -8,6 +8,10 @@ import sqlite3
 import xml.etree.ElementTree as ET
 from typing import Optional, Tuple
 
+class LutronDatabaseException(Exception):
+    """Exception raised for LutronDatabase errors."""
+    pass
+
 class LutronDatabase:
     def __init__(self, server: str, config_path: Optional[str] = None):
         """
@@ -413,6 +417,7 @@ class LutronDatabase:
                 max_read_size = 1024 * 1024  # Stop after reading 1MB
                 
                 for chunk in response.iter_content(chunk_size=chunk_size):
+                    logfire.debug(f"Read {len(chunk)} bytes", )
                     buffer += chunk
                     
                     # Check if we have the timestamp
@@ -471,6 +476,7 @@ class LutronDatabase:
             self.logger.info("XML processing completed successfully")
         except Exception as e:
             self.logger.error(f"Error processing XML data: {e}")
+            raise LutronDatabaseException(f"Error processing XML data: {e}")
     
     @logfire.instrument("Process Outputs")
     def _process_outputs(self, root: ET.Element, cursor):

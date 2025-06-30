@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import logfire
 import re
 import traceback
 from typing import TYPE_CHECKING, Awaitable, Callable, List, Any
@@ -21,7 +22,7 @@ if TYPE_CHECKING:
     from nexusvoice.tools.lutron.commands.base import LutronCommand
 
 class LutronHomeworksClient:
-    def __init__(self, host, port=23, username=None, password=None, keepalive_interval=60):
+    def __init__(self, host, username=None, password=None, port=23, keepalive_interval=60):
         self.host = host
         self.port = port
         self.username = username
@@ -51,6 +52,7 @@ class LutronHomeworksClient:
         assert self._writer is not None, "Connection not established. Call connect() first."
         return self._writer
     
+    @logfire.instrument("Connect")
     async def connect(self):
         async with self._lock:
             self.logger.info(f"Connecting to {self.host}:{self.port}")
@@ -66,24 +68,35 @@ class LutronHomeworksClient:
                 self.command_ready = False
                 self._reconnect_later()
 
+    @logfire.instrument("Login")
     async def _login(self):
         try:
+            if self.username is None or self.password is None:
+                raise ValueError("Username and password must be provided.")
+
             self.logger.debug("Waiting for login prompt...")
-            data = await self._read_until(b"login: ", timeout=10)
-            self.logger.debug(f"Login prompt received: {data}")
-            if self.username:
+            with logfire.span("Find Login Prompt"):
+                data = await self._read_until(b"login: ", timeout=10)
+                self.logger.debug(f"Login prompt received: {data}")
+                logfire.debug("Sending Username")
                 await self._write(self.username + LINE_END)
-            if self.password:
+
+            with logfire.span("Find Password Prompt"):
                 data = await self._read_until(b"password: ", timeout=10)
                 self.logger.debug(f"Password prompt received: {data}")
+                logfire.debug("Sending Password")
                 await self._write(self.password + LINE_END)
-            await self._read_prompt(timeout=10)
+            with logfire.span("Reading Command Ready Prompt"):
+                await self._read_prompt(timeout=10)
 
             # Reset the command prompt once after logging in to discard
             # any residual data from the login process (like a \0 char
             # that is showing up attached to the first prompt)
             await self._write("\r\n")
-            await self._read_prompt(timeout=10)
+            with logfire.span("Reading Command Ready Prompt 2"):
+                await self._read_prompt(timeout=10)
+            
+            logfire.debug("Login complete.")
             self.logger.debug("Login complete.")
             self.command_ready = True
         except Exception as e:
@@ -211,12 +224,14 @@ class LutronHomeworksClient:
                 self.command_ready = False
                 self._reconnect_later()
 
+    @logfire.instrument("Send Heartbeat")
     async def send_heartbeat(self):
         """Send a keep-alive/heartbeat command. Customize as needed."""
         self.logger.debug("Sending heartbeat...")
         # Example: await self.send_command('NOOP')
         pass
 
+    @logfire.instrument("Send Command")
     async def send_command(self, command: str):
         async with self._lock:
             if not self.connected or self.writer is None:
@@ -224,6 +239,7 @@ class LutronHomeworksClient:
             await self._write(command + LINE_END)
             # Optionally, read response here
 
+    @logfire.instrument("Execute Command")
     async def execute_command(self, command: 'LutronCommand', timeout: float = 5.0):
         """
         Execute a Lutron command and return the response.
@@ -270,6 +286,7 @@ class LutronHomeworksClient:
             name="Lutron-Reconnect",
         )
 
+    @logfire.instrument("Close")
     async def close(self):
         print("Closing Lutron client...")
 
