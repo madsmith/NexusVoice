@@ -20,12 +20,42 @@ from nexusvoice.core.api import NexusAPI, NexusAPIContext
 from nexusvoice.core.config import NexusConfig
 from nexusvoice.utils.logging import get_logger
 from nexusvoice.utils.debug import DebugContext
-from pydantic_ai.mcp import MCPServerStdio
+from pydantic_ai.mcp import MCPServer, MCPServerStdio
 
 logger = get_logger(__name__)
 
 from nexusvoice.tools.weather import get_weather
 
+class Prefix:
+    # Class variable to track instances of each prefix
+    _prefix_counts = {}
+    
+    def __init__(self, prefix):
+        self._prefix = prefix
+        
+        # Update the reference count and set instance_id
+        self._instance_id = Prefix.allocate_prefix(prefix)
+
+    @property
+    def base_prefix(self) -> str:
+        return self._prefix
+    
+    @property
+    def prefix(self) -> str:
+        suffix = ""
+        if self._instance_id > 1:
+            suffix = f"_{self._instance_id}"
+        return f"{self._prefix}{suffix}"
+    
+    @classmethod
+    def allocate_prefix(cls, prefix):
+        """Allocate a new prefix for a given prefix"""
+        if prefix in cls._prefix_counts:
+            cls._prefix_counts[prefix] += 1
+        else:
+            cls._prefix_counts[prefix] = 1
+        
+        return cls._prefix_counts[prefix]
 
 class NexusAPIOnlineContext(NexusAPIContext["NexusAPIOnlineContext"]):
     def __init__(self, api: "NexusAPIOnline", agent_history: list[ModelMessage], extra_state: dict):
@@ -45,6 +75,8 @@ class NexusAPIOnlineContext(NexusAPIContext["NexusAPIOnlineContext"]):
         ]
         
         for i, agent in enumerate(agents):
+            # TODO: consider if mcp servers should have a life context separate
+            # from the api context
             ctx = agent.run_mcp_servers()
             await self._stack.enter_async_context(ctx)
             # await self._stack.enter_async_context(DebugContext(ctx, f"Agent {i}", logger.debug))
@@ -88,7 +120,7 @@ class NexusAPIOnline(NexusAPI):
     def __init__(self, config: NexusConfig):
         super().__init__(config)
 
-        self._mcp_servers = {}
+        self._mcp_servers: dict[str, MCPServer] = {}
 
         self._classifier_agent = None
         self._home_agent = None
@@ -104,60 +136,62 @@ class NexusAPIOnline(NexusAPI):
         # Initialize MCP servers
         await self._initialize_mcp_servers()
 
-        self._deps.servers = list(self._mcp_servers.values())
+        self._deps.servers = self._mcp_servers
 
         self._classifier_agent = LocalClassifierAgentFactory.create(self._deps)
         self._home_agent = HomeAutomationAgentFactory.create(self._deps)
         self._conversational_agent = ConversationalAgentFactory.create(self._deps)
 
         # Register tools
-        self._home_agent.tool(home_control)
+        # self._home_agent.tool(home_control)
         self._conversational_agent.tool(get_weather)
 
     async def _initialize_mcp_servers(self):
         logger.debug("Initializing MCP servers...")
-        servers = self.config.get("servers", [])
-        for server in servers:
-            await self._create_mcp_server(server)
+        server_configs = self.config.get("mcp-server-configs", [])
+        for server_config in server_configs:
+            await self._create_mcp_server(server_config)
 
-    async def _create_mcp_server(self, server: dict):
-        logger.debug(f"Creating MCP server {server['name']}...")
+    async def _create_mcp_server(self, server_config: dict):
+        logger.debug(f"Creating MCP server {server_config['name']}...")
         
-        if server["transport"] == "stdio":
-            await self._create_stdio_mcp_server(server)
+        if server_config["transport"] == "stdio":
+            await self._create_stdio_mcp_server(server_config)
         else:
-            logger.warning(f"Unknown transport type {server['transport']}")
+            logger.warning(f"Unknown transport type {server_config['transport']}")
 
-    async def _create_stdio_mcp_server(self, server: dict):
-        if 'command' not in server:
-            logger.warning("Missing command for stdio server")
+    async def _create_stdio_mcp_server(self, server_config: dict):
+        if 'command' not in server_config:
+            logger.error("Missing command for stdio server")
             return
 
+        # Parse args
         args = []
-        if 'args' in server:
-            if isinstance(server["args"], list):
-                args = server["args"]
+        if 'args' in server_config:
+            if isinstance(server_config["args"], list):
+                args = server_config["args"]
             else:
-                args = shlex.split(server["args"])
+                args = shlex.split(server_config["args"])
 
+        # Parse environment variables
         env = {}
-        if 'env' in server:
-            env = server["env"]
+        if 'env' in server_config:
+            env = server_config["env"]
         
-        prefix = server.get("prefix", "tool")
-        in_use_count = 1
-        while prefix in self._mcp_servers.keys():
-            prefix += f"_{in_use_count}"
-            in_use_count += 1
+        name = server_config['name']
+
+        # Parse prefix - ensure each server has a unique prefix
+        base_prefix = server_config.get("prefix", "tool")
+        prefix = Prefix(base_prefix)
         
         instance = MCPServerStdio(
-            server["command"],
+            server_config["command"],
             args=args,
-            tool_prefix=prefix,
+            tool_prefix=prefix.prefix,
             env=env
         )
 
-        self._mcp_servers[prefix] = instance
+        self._mcp_servers[name] = instance
 
     async def run_context(self):
         """

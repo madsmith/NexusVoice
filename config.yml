@@ -43,7 +43,7 @@ openai:
 agents:
   classifier:
     model: 'distilbert-nexus'
-  home_automation:
+  home_automation_local:
     model: mistral-nemo-instruct-2407
     base_url: http://localhost:1234/v1/
     api_key: "n/a"
@@ -56,6 +56,24 @@ agents:
       one of the available tools. JSON will be returned indicating the status of the
       tool call. Call the final_result tool to report a summary to the user the result of
       the previously requested action.  The summary_message will be spoken to the user.
+    mcp_servers: [
+      mcp-lutron-homeworks
+    ]
+  home_automation:
+    model: gpt-4.1-2025-04-14
+    api_key: ${openai.api_key}
+    retries: 5
+    system_prompt: |
+      You are a home automation assistant with access to tools to perform tasks.
+      You can perform actions such as turning on/off lights, fans, and shades and
+      provide status updates on the completion of the action.
+      When asked to perform a task, respond with a structured JSON command invoking
+      one of the available tools. JSON will be returned indicating the status of the
+      tool call. Call the final_result tool to report a summary to the user the result of
+      the previously requested action.  The summary_message will be spoken to the user.
+    mcp_servers: [
+      lutron-homeworks
+    ]
   conversational:
     model: gpt-4.1-2025-04-14
     api_key: ${openai.api_key}
@@ -63,9 +81,14 @@ agents:
       You are a helpful assistant. Provide clear and concise responses
       that are suitable for audio playback. Keep responses brief and natural. You are
       located in Wildwood, MO.
+    mcp_servers: [
+      run-python,
+      radarr-movies,
+      lutron-homeworks-conversational
+    ]
   local_home_automation:
     model: meta-llama/llama-3.2-3b-instruct
-servers: 
+mcp-server-configs: 
   - name: run-python
     transport: stdio
     command: deno
@@ -75,7 +98,22 @@ servers:
     transport: stdio
     command: /Users/martin/Projects/python/mcp-radarr/.venv/bin/mcp-radarr
     prefix: radarr_movies
+  - name: lutron-homeworks
+    transport: stdio
+    command: /Users/martin/Projects/python/lutron-homeworks/.venv/bin/mcp-proxy
+    args: --url http://localhost:8060/mcp/
+    prefix: lutron_homeworks
+  - name: lutron-homeworks-conversational
+    transport: stdio
+    command: /Users/martin/Projects/python/lutron-homeworks/.venv/bin/mcp-proxy
+    args: --url http://localhost:8060/mcp/
+    prefix: lutron_homeworks
 servers_disabled:
+  - name: mcp-lutron-homeworks
+    transport: stdio
+    command: python
+    args: -m nexusvoice.tools.lutron.server
+    prefix: home_automation_control
   - name: brave-search
     transport: stdio
     command: npx

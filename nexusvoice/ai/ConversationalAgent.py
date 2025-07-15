@@ -10,7 +10,14 @@ class ConversationalAgentFactory:
         Factory method to create a pydantic_ai.Agent for home automation intents.
         """
         config = support_deps.config
-        servers = support_deps.servers
+
+        mcp_server_names = config.get("agents.conversational.mcp_servers", [])
+        servers = []
+        for server_name in mcp_server_names:
+            if server_name not in support_deps.servers:
+                raise ValueError(f"MCP server {server_name} not found")
+            servers.append(support_deps.servers[server_name])
+        
         provider = OpenAIProvider(
             api_key=config.get("agents.conversational.api_key", ""),
             base_url=config.get("agents.conversational.base_url", None)

@@ -9,7 +9,7 @@ from pydantic_ai.mcp import MCPServer
 @dataclass
 class NexusSupportDependencies:
     config: NexusConfig
-    servers: list[MCPServer] = field(default_factory=list)
+    servers: dict[str, MCPServer] = field(default_factory=dict)
 
 class RequestType(BaseModel):
     """The type of request being made"""
