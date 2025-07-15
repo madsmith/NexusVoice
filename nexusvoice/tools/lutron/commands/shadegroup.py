@@ -26,10 +26,10 @@ class ShadeGroupCommand(LutronCommand[ShadeGroupAction], schema=schema):
 
     def __init__(self, iid: int, action: Union[str, ShadeGroupAction]):
         """
-        Initialize an output command.
+        Initialize a shade group command.
         
         Args:
-            action: Output action to perform
+            action: Shade group action to perform
             parameters: Optional parameters for the command
         """
         # Convert string to enum if needed
