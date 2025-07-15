@@ -264,7 +264,7 @@ class LutronDatabase:
             return result[0]
         return default
 
-    def _parse_export_timestamp(self, xml_chunk):
+    def _parse_export_timestamp(self, xml_chunk: str | bytes) -> datetime | None:
         """
         Parse the export timestamp from a chunk of XML data.
         
