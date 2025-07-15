@@ -1,5 +1,6 @@
 import logging
 import traceback
+from typing import cast
 
 LOG_TRACE_LEVEL = logging.DEBUG // 2
 logging.addLevelName(LOG_TRACE_LEVEL, "TRACE")
@@ -9,13 +10,13 @@ class CustomLogger(logging.Logger):
         if self.isEnabledFor(LOG_TRACE_LEVEL):
             self._log(LOG_TRACE_LEVEL, message, args, **kwargs)
 
-logging.Logger.trace = CustomLogger.trace
+logging.Logger.trace = CustomLogger.trace # type: ignore
 logging.setLoggerClass(CustomLogger)
 
 
 # Function to get a pre-configured logger
 def get_logger(name: str = __name__) -> CustomLogger:
-        return logging.getLogger(name)  # Returns an instance of CustomLogger
+        return cast(CustomLogger, logging.getLogger(name))  # Returns an instance of CustomLogger
 
 class StackTraceFormatter(logging.Formatter):
     def format(self, record):
