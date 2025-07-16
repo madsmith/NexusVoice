@@ -10,7 +10,6 @@ from silero_vad.model import OnnxWrapper
 import time
 import torch
 import torchaudio
-from typing import Optional
 
 from nexusvoice.ai.AudioInferenceEngine import AudioInferenceEngine
 from nexusvoice.ai.TTSInferenceEngine import TTSInferenceEngine
@@ -59,16 +58,16 @@ class NexusVoiceClient:
         self.client_id = client_id
         self.config = config
 
-        self._api: Optional[NexusAPI] = None
-        self._context_manager: Optional[RuntimeContextManager] = None
-        self.context: Optional[NexusAPIContext] = None
+        self._api: NexusAPI | None = None
+        self._context_manager: RuntimeContextManager | None = None
+        self.context: NexusAPIContext | None = None
 
-        self._audio_device: Optional[AudioDevice] = None
+        self._audio_device: AudioDevice | None = None
 
-        self._wake_word_model: Optional[OpenWakeWordModel] = None
-        self._vad_model: Optional[OnnxWrapper] = None
-        self._whisper_engine: Optional[AudioInferenceEngine] = None   
-        self._tts_engine: Optional[TTSInferenceEngine] = None
+        self._wake_word_model: OpenWakeWordModel | None = None
+        self._vad_model: OnnxWrapper | None = None
+        self._whisper_engine: AudioInferenceEngine | None = None   
+        self._tts_engine: TTSInferenceEngine | None = None
         
         self._command_queue = asyncio.Queue()
 
@@ -253,7 +252,7 @@ class NexusVoiceClient:
 
     async def process_commands(self):
         """ Process commands from the command queue """
-        command: Optional[Command] = None
+        command: Command | None = None
         try:
             async with asyncio.TaskGroup() as tg:
                 while self.running:
