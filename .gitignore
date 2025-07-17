@@ -17,6 +17,7 @@ node_modules
 latest_silero_models.yml
 config/
 server.log
+logs/
 
 # Model files
 nexusvoice/models/distilbert-nexus*

@@ -27,6 +27,7 @@ from nexusvoice.client.RuntimeContextManager import RuntimeContextManager
 from nexusvoice.core.api import NexusAPI, NexusAPIContext
 from nexusvoice.core.api.online import NexusAPIOnline
 from nexusvoice.core.config import NexusConfig
+from nexusvoice.db.interaction_log import InteractionLog
 from nexusvoice.utils.logging import get_logger
 from nexusvoice.utils.debug import TimeThis
 
@@ -78,6 +79,11 @@ class NexusVoiceClient:
         self._silence_duration = 0
         self._recording_state = RecordingState()
 
+        self._interaction_log: InteractionLog = InteractionLog(
+            self.config,
+            Path(self.config.get("nexus.client.interaction_log_path", "logs"))
+        )
+
         self.running = False
 
     @property
@@ -126,6 +132,8 @@ class NexusVoiceClient:
             self._initialize_TTS_model()
 
             self._initialize_audio_device()
+
+            self._interaction_log.init_db()
         
         # Move context manager logging out of the initialization span
         with logfire.span("ContextManager Lifecycle"):
@@ -332,8 +340,8 @@ class NexusVoiceClient:
         
     async def _process_command_process_audio(self, command: CommandProcessAudio):
         assert isinstance(command, CommandProcessAudio), "Command is not a process audio command"
+        filename = Path("recordings", f"recording_{self.client_id}_{int(time.time())}_audio.wav")
         if self.config.get("nexus.client.save_recordings", False):
-            filename = Path("recordings", f"recording_{self.client_id}_{int(time.time())}_audio.wav")
             task = asyncio.create_task(save_recording_async(command.audio_bytes, filename))
             def on_task_done(task):
                 try:
@@ -349,6 +357,9 @@ class NexusVoiceClient:
         # First use Whisper for STT
         transcription = self.whisper_engine.infer(np_audio, sampling_rate=AUDIO_SAMPLE_RATE)
         transcription = transcription.strip()
+
+        if self.config.get("nexus.client.save_recordings", False):
+            self._interaction_log.record_interaction(filename, transcription)
 
         logger.info(f"Transcription: {transcription}")
 
@@ -484,10 +495,11 @@ class NexusVoiceClient:
         if self.config.get("nexus.client.save_recordings", False):
             # Save the recording to a file
             filename = Path("recordings", f"recording_{self.client_id}_{int(time.time())}_wakeword.wav")
-            task = asyncio.create_task(save_recording_async(command.audio_bytes, filename))
-            def on_task_done(task):
+            task: asyncio.Task[None] = asyncio.create_task(save_recording_async(command.audio_bytes, filename))
+            def on_task_done(task: asyncio.Task[None]):
                 try:
                     task.result()
+                    self._interaction_log.record_wake_word(filename, command.wake_word, transcription)
                     logger.info(f"Saved recording to {filename}")
                 except Exception as e:
                     logger.error(f"Error saving recording: {e}")

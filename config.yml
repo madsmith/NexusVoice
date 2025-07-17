@@ -2,6 +2,7 @@ nexus:
   client:
     no_response_error: "Something went wrong, there is no response."
     context_timeout: 90
+    save_recordings: true
     wake_word:
       models:
         - name: "hey jarvis"
