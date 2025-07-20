@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import sys
 import time
@@ -154,3 +155,41 @@ class DebugContext:
         result = await self.ctx.__aexit__(exc_type, exc_val, exc_tb)
         self.logfn(f"[DEBUG] __aexit__ for agent: {self.label} complete")
         return result
+
+class AsyncRateLimiter:
+    _instances: dict[str, "AsyncRateLimiter"] = {}
+
+    def __init__(self, rate: int, per_seconds: float = 60, min_delay: float = 0.0):
+        self._rate = rate
+        self._per_seconds = per_seconds
+        self._tokens = rate
+        self._last_refill = time.monotonic()
+        self._lock = asyncio.Lock()
+        self._min_delay = min_delay  # Optionally add minimum delay to slow down runaway tasks
+
+    async def acquire(self):
+        async with self._lock:
+            now = time.monotonic()
+            elapsed = now - self._last_refill
+
+            refill_tokens = int((elapsed / self._per_seconds) * self._rate)
+            if refill_tokens > 0:
+                self._tokens = min(self._rate, self._tokens + refill_tokens)
+                self._last_refill = now
+
+            if self._tokens > 0:
+                self._tokens -= 1
+                return True
+
+            # If empty, apply delay to slow things down
+            delay = self._min_delay + (self._per_seconds / self._rate)
+            await asyncio.sleep(delay)
+            return False
+
+    @classmethod
+    def set_instance(cls, instance: "AsyncRateLimiter", instance_id: str = "default"):
+        cls._instances[instance_id] = instance
+
+    @classmethod
+    def get_instance(cls, instance_id: str = "default") -> "AsyncRateLimiter | None":
+        return cls._instances.get(instance_id)
