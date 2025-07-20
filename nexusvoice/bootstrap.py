@@ -10,6 +10,8 @@ import openwakeword
 
 import logfire
 
+EnvironmentT = Literal['DEV', 'TEST', 'PROD']
+
 logfire_instance = None
 
 def get_logfire():
@@ -17,7 +19,7 @@ def get_logfire():
     
     return logfire_instance
 
-def configure_logfire(environment_mode: Literal['DEV', 'PROD'], service_name: str):
+def configure_logfire(environment_mode: EnvironmentT, service_name: str):
     global logfire_instance
 
     # Determine if running client/main or some other script
@@ -28,18 +30,18 @@ def configure_logfire(environment_mode: Literal['DEV', 'PROD'], service_name: st
     logfire_instance.install_auto_tracing(modules=['nexusvoice.ai'], min_duration=0.001)
     basicConfig(handlers=[logfire.LogfireLoggingHandler()])
 
-def bootstrap(environment_mode: Literal['DEV', 'PROD'], service_name: str = "NexusVoice"):
+def bootstrap(environment_mode: EnvironmentT, service_name: str = "NexusVoice"):
     setup_environment(environment_mode)
     suppress_warnings(environment_mode)
     configure_logfire(environment_mode, service_name)
     initialize_openwakeword()
 
-def setup_environment(environment_mode: Literal['DEV', 'PROD']):
+def setup_environment(environment_mode: EnvironmentT):
     os.environ["LOGFIRE_SEND_TO_LOGFIRE"] = "true"
     os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-def suppress_warnings(environment_mode: Literal['DEV', 'PROD']):
+def suppress_warnings(environment_mode: EnvironmentT):
     warnings.filterwarnings(
         "ignore", message=".*will fall back to run on the CPU.*", category=UserWarning
     )
