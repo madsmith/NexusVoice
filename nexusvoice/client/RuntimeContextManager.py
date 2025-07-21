@@ -266,13 +266,15 @@ class RuntimeContextManager:
     
     def _get_next_timeout(self) -> tuple[str, float] | None:
         timeouts = []
+        now = asyncio.get_event_loop().time()
         for client_id, managed_context in self._contexts.items():
             if managed_context.is_open:
-                timeout = managed_context.timeout
+                # Compute the time until the context expires
                 close_at = managed_context.close_at
-                timeouts.append((client_id, timeout, close_at))
+                timeout = close_at - now
+                timeouts.append((client_id, timeout))
         if timeouts:
-            return min(timeouts, key=lambda x: x[2])[:2]
+            return min(timeouts, key=lambda x: x[1])
         return None
     
     async def _open_contexts(self):
