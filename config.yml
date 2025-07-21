@@ -1,7 +1,8 @@
 nexus:
   client:
     no_response_error: "Something went wrong, there is no response."
-    context_timeout: 90
+    context_timeout: 30
+    history_context_timeout: 60
     save_recordings: true
     wake_word:
       models:

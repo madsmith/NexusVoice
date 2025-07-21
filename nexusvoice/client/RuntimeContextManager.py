@@ -1,17 +1,18 @@
+from ast import TypeVar
 import asyncio
+from dataclasses import dataclass
 from enum import Enum, auto
 import traceback
 import logfire
-from typing import Optional
+from typing import Any, Awaitable, Callable, Generic, TypeVar, Union, cast
 
+from nexusvoice.core.api.base import AsyncContext, NexusAPIContext
 from nexusvoice.utils.state import StateMachine
+from nexusvoice.utils.debug import AsyncRateLimiter
 
 class ContextState(Enum):
     CLOSE_IDLE = auto()
     OPEN_IDLE = auto()
-    OPENING = auto()
-    CLOSING = auto()
-    REFRESH = auto()
     SHUTTING_DOWN = auto()
     SHUT_DOWN = auto()
     NONE = auto()
@@ -20,9 +21,6 @@ class ContextState(Enum):
         return self.name
 
 class ContextEvent(Enum):
-    OPEN_REQUESTED = auto()
-    CLOSE_REQUESTED = auto()
-    CLOSE_TIMEOUT = auto()
     OPENED = auto()
     CLOSED = auto()
     SHUT_DOWN = auto()
@@ -31,30 +29,16 @@ class ContextEvent(Enum):
     def __str__(self):
         return self.name
 
-class ContextStateMachine(StateMachine[ContextState, ContextEvent]):
-    # State transition table: {current_state: {event: next_state}}
+class ContextManagerStateMachine(StateMachine):
     TRANSITIONS = {
         ContextState.CLOSE_IDLE: {
-            ContextEvent.OPEN_REQUESTED: ContextState.OPENING,
-            ContextEvent.CLOSE_REQUESTED: ContextState.CLOSING,
-            ContextEvent.SHUT_DOWN: ContextState.SHUT_DOWN,
-        },
-        ContextState.OPENING: {
             ContextEvent.OPENED: ContextState.OPEN_IDLE,
-            ContextEvent.SHUT_DOWN: ContextState.SHUTTING_DOWN,
-        },
-        ContextState.OPEN_IDLE: {
-            ContextEvent.CLOSE_REQUESTED: ContextState.CLOSING,
-            ContextEvent.CLOSE_TIMEOUT: ContextState.CLOSING,
-            ContextEvent.OPEN_REQUESTED: ContextState.REFRESH,
-            ContextEvent.SHUT_DOWN: ContextState.SHUTTING_DOWN,
-        },
-        ContextState.CLOSING: {
             ContextEvent.CLOSED: ContextState.CLOSE_IDLE,
             ContextEvent.SHUT_DOWN: ContextState.SHUTTING_DOWN,
         },
-        ContextState.REFRESH: {
+        ContextState.OPEN_IDLE: {
             ContextEvent.OPENED: ContextState.OPEN_IDLE,
+            ContextEvent.CLOSED: ContextState.CLOSE_IDLE,
             ContextEvent.SHUT_DOWN: ContextState.SHUTTING_DOWN,
         },
         ContextState.SHUTTING_DOWN: {
@@ -62,28 +46,116 @@ class ContextStateMachine(StateMachine[ContextState, ContextEvent]):
         },
     }
 
-class RuntimeContextManager:
-    def __init__(self, api, context_timeout=15):
-        self.api = api
-        self.context_timeout = context_timeout
+T = TypeVar("T")
 
-        self._state_machine = ContextStateMachine()
+class ManagedContext(Generic[T]):
+    def __init__(
+        self,
+        context_provider: 
+            Callable[[], AsyncContext[T]] | 
+            Callable[[], Awaitable[AsyncContext[T]]],
+        timeout: float
+    ):
+        self._context: AsyncContext[T] | None = None
+        self._data: T | None = None
+        self._context_provider = context_provider
+        self._timeout = timeout
+        self._opened_at = -1
+        self._is_open = False
+
+    @property
+    def context(self) -> AsyncContext[T] | None:
+        return self._context
+    
+    @property
+    def data(self) -> T | None:
+        return self._data
+
+    @property
+    def timeout(self) -> float:
+        return self._timeout
+    
+    @property
+    def is_open(self) -> bool:
+        return self._is_open
+    
+    @property
+    def close_at(self) -> float:
+        return self._opened_at + self._timeout
+    
+    async def open(self):
+        # Acquire the context if it's not already acquired
+        if self._context is None:
+            if asyncio.iscoroutinefunction(self._context_provider):
+                self._context = await self._context_provider() 
+            else:
+                sync_provider = cast(Callable[[], AsyncContext[T]], self._context_provider)
+                ctx: AsyncContext[T] = sync_provider() 
+                self._context = ctx
+
+        assert self._context is not None, "Context Provider failed to provide context"
+
+        # Open the context
+        self._data = await self._context.__aenter__()
+
+        self._is_open = True
+        self._opened_at = asyncio.get_event_loop().time()
+
+    async def close(self):
+        if self._context is None:
+            return
+
+        # Close the context
+        await self._context.__aexit__(None, None, None)
 
         self._context = None
-        self._context_open = False
-        self._context_opened_at = -1
+        self._data = None
+        self._is_open = False
+        self._opened_at = -1
+
+    async def refresh(self):
+        if self._context is None:
+            return
+
+        assert self._is_open, "Refresh against closed context"
+
+        self._opened_at = asyncio.get_event_loop().time()
+
+    def __repr__(self):
+        return f"ManagedContext({self._context}, {self._data}, {self._is_open}, {self._opened_at}, {self._timeout})"
+
+class RuntimeContextManager:
+    def __init__(self):
+        self._state_machine = ContextManagerStateMachine()
+
+        self._contexts: dict[str, ManagedContext[Any]] = {}
+
         self._manager_task = None
 
         # Events for communication
+        # Request events
         self._context_open_requested = asyncio.Event()
         self._context_close_requested = asyncio.Event()
+        # Response events
         self._context_open_complete = asyncio.Event()
         self._context_close_complete = asyncio.Event()
+        # Wake up event - called when request events are set
         self._context_wake_up_requested = asyncio.Event()
 
-    def get_context(self):
-        return self._context
+    def get_context(self, client_id: str) -> AsyncContext[Any] | None:
+        return self._contexts[client_id].context
 
+    def add_context(
+        self,
+        client_id: str,
+        context_provider: Callable[[], AsyncContext] | Callable[[], Awaitable[AsyncContext]],
+        timeout: float
+    ):
+        self._contexts[client_id] = ManagedContext(
+            context_provider,
+            timeout
+        )
+    
     async def open(self):
         """Request to open the context. Returns when context is open."""
         logfire.info("RuntimeContextManager::open")
@@ -105,7 +177,7 @@ class RuntimeContextManager:
     def start(self):
         if self._manager_task is None or self._manager_task.done():
             self._manager_task = asyncio.create_task(
-                self._context_manager(),
+                self._context_manager_multi(),
                 name="RuntimeContextManager",
             )
 
@@ -121,117 +193,108 @@ class RuntimeContextManager:
     def get_task(self):
         return self._manager_task
 
-    async def _open_context(self):
-        if self._context:
-            await self._context.__aenter__()
-
-            self._context_open = True
-            self._context_opened_at = asyncio.get_event_loop().time()
-            self._context_open_complete.set()
-
-    async def _refresh_context(self):
-        assert self._context is not None
-        self._context_open = True
-        self._context_opened_at = asyncio.get_event_loop().time()
-        self._context_open_complete.set()
-
-    async def _close_context(self):
-        if self._context:
-            await self._context.__aexit__(None, None, None)
-
-            self._context = None
-            self._context_open = False
-            self._context_opened_at = -1
-            self._context_close_complete.set()
-
-    def _map_event(self) -> Optional[ContextEvent]:
-        if self._context_open_requested.is_set():
-            return ContextEvent.OPEN_REQUESTED
-        elif self._context_close_requested.is_set():
-            return ContextEvent.CLOSE_REQUESTED
-        return None
-    
-    async def _context_manager(self):
-        current_state = None
-        state_count = 0
+    async def _context_manager_multi(self):
+        rate_limiter = AsyncRateLimiter(100, per_seconds=20)
         while True:
             try:
-                state = self._state_machine.state
-                logfire.info(f"ContextManager: State: {state}")
-                if state != current_state:
-                    current_state = state
-                    state_count = 1
-                else:
-                    logfire.warning(f"ContextManager: Possible state loop detected in state {state}")
-                    state_count += 1
-                if state_count > 3:
-                    logfire.warning(f"ContextManager: State: {state} has been in state for {state_count} iterations")
+                await rate_limiter.acquire()
+                if self._state_machine.state == ContextState.SHUT_DOWN:
+                    logfire.info("ContextManager: Shut down")
                     break
-
-                if state == ContextState.CLOSE_IDLE or state == ContextState.OPEN_IDLE:
-                    event: Optional[ContextEvent] = None
-                    if state == ContextState.CLOSE_IDLE:
-                        logfire.info("ContextManager: Waiting for open")
-                        await self._context_wake_up_requested.wait()
-                    else:
-                        logfire.info(f"ContextManager: Waiting for close or timeout ({self.context_timeout}s)")
-                        try:
-                            await asyncio.wait_for(self._context_wake_up_requested.wait(), timeout=self.context_timeout)
-                        except asyncio.TimeoutError:
-                            logfire.info("ContextManager: Timeout")
-                            event = ContextEvent.CLOSE_TIMEOUT
-
-                    event = event if event else self._map_event()
-                    logfire.info(f"ContextManager: Event: {event}")
-
-                    self._context_open_requested.clear()
-                    self._context_close_requested.clear()
-                    self._context_wake_up_requested.clear()
-
-                    if event is not None:
-                        self._state_machine.on_event(event)
-
-                elif state == ContextState.OPENING:
-                    self._context = await self.api.run_context()
-                    await self._open_context()
-                    self._state_machine.on_event(ContextEvent.OPENED)
-                    self._context_open_complete.set()
-
-                elif state == ContextState.CLOSING or state == ContextState.SHUTTING_DOWN:
-                    logfire.info(f"ContextManager: Closing")
+                elif self._state_machine.state == ContextState.SHUTTING_DOWN:
+                    logfire.info("ContextManager: Shutting down")
+                    self._context_close_requested.set()
+                    self._context_wake_up_requested.set()
+                else:
+                    timeout_info: tuple[str, float] | None = None
                     try:
-                        await self._close_context()
-                    except BaseException as e:
-                        logfire.error(f"ContextManager: Error closing context: {e}")
-                        traceback.print_exc()
-
-                    event = ContextEvent.SHUT_DOWN if state == ContextState.SHUTTING_DOWN else ContextEvent.CLOSED
-                    self._state_machine.on_event(event)
-                    logfire.info(f"ContextManager: Transitioned to state: {event} {self._state_machine.state}")
-                    self._context_close_complete.set()
-
-                elif state == ContextState.REFRESH:
-                    await self._refresh_context()
-                    self._state_machine.on_event(ContextEvent.OPENED)
+                        # Check if any contexts need to timeout
+                        timeout_info = self._get_next_timeout()
+                        if timeout_info is not None:
+                            logfire.info(f"ContextManager: Waiting for timeout on context {timeout_info[0]} ({timeout_info[1]:.1f}s)")
+                            await asyncio.wait_for(self._context_wake_up_requested.wait(), timeout_info[1])
+                        else:
+                            logfire.info("ContextManager: Waiting for next event")
+                            await self._context_wake_up_requested.wait()
+                    except asyncio.TimeoutError:
+                        if timeout_info is None:
+                            logfire.info("ContextManager: No timeout info")
+                            continue
+                        logfire.info(f"ContextManager: Context Timeout {timeout_info[0]}")
+                        await self._close_context(timeout_info[0])
+                        continue
+                
+                    # Wake up must have occurred - clear event
+                    self._context_wake_up_requested.clear()
+                
+                # Handle open / close events
+                if self._context_open_requested.is_set():
+                    logfire.info(f"ContextManager: Open requested")
+                    await self._open_contexts()
+                    self._context_open_requested.clear()
                     self._context_open_complete.set()
+                    self._state_machine.on_event(ContextEvent.OPENED)
 
-                elif state == ContextState.SHUT_DOWN:
-                    # Terminate the loop
-                    break
-
+                elif self._context_close_requested.is_set():
+                    logfire.info(f"ContextManager: Close requested")
+                    await self._close_contexts()
+                    self._context_close_requested.clear()
+                    self._context_close_complete.set()
+                    is_shutdown = self._state_machine.state == ContextState.SHUTTING_DOWN
+                    event = ContextEvent.SHUT_DOWN if is_shutdown else ContextEvent.CLOSED
+                    self._state_machine.on_event(event)
                 else:
-                    logfire.error(f"ContextManager: Unknown state: {state}")
-                    raise Exception(f"Unknown state: {state}")
-
+                    logfire.warning("ContextManager: Unknown wake up event cause")
+            
             except asyncio.CancelledError:
                 logfire.info("ContextManager: Cancelled")
                 if self._state_machine.state != ContextState.SHUT_DOWN:
                     self._state_machine.on_event(ContextEvent.SHUT_DOWN)
             except Exception as e:
-                logfire.error(f"ContextManager: Exception: {e}")
+                logfire.error(f"ContextManager: Exception: {e} {[type(e).__name__]}")
                 if self._state_machine.state != ContextState.SHUT_DOWN:
                     self._state_machine.on_event(ContextEvent.SHUT_DOWN)
+            except GeneratorExit:
+                self._state_machine.on_event(ContextEvent.SHUT_DOWN)
+                raise
             except BaseException as e:
-                logfire.error(f"ContextManager: BaseException: {e}")
+                logfire.error(f"ContextManager: BaseException: {e} {[type(e).__name__]}")
+                # import traceback
+                # logfire.error(traceback.format_exc())
                 if self._state_machine.state != ContextState.SHUT_DOWN:
                     self._state_machine.on_event(ContextEvent.SHUT_DOWN)
+    
+    def _get_next_timeout(self) -> tuple[str, float] | None:
+        timeouts = []
+        for client_id, managed_context in self._contexts.items():
+            if managed_context.is_open:
+                timeout = managed_context.timeout
+                close_at = managed_context.close_at
+                timeouts.append((client_id, timeout, close_at))
+        if timeouts:
+            return min(timeouts, key=lambda x: x[2])[:2]
+        return None
+    
+    async def _open_contexts(self):
+        for client_id, managed_context in self._contexts.items():
+            if not managed_context.is_open:
+                logfire.info(f"ContextManager: Opening context for {client_id}")
+                await managed_context.open()
+            else:
+                logfire.info(f"ContextManager: Refreshing context for {client_id}")
+                await managed_context.refresh()
+    
+    async def _close_contexts(self):
+        for client_id, managed_context in self._contexts.items():
+            if managed_context.is_open:
+                logfire.info(f"ContextManager: Closing context for {client_id}")
+                await managed_context.close()
+
+    async def _close_context(self, client_id: str):
+        managed_context = self._contexts.get(client_id)
+        if managed_context is None:
+            logfire.warning(f"ContextManager: No context found for {client_id}")
+            return
+        if managed_context.is_open:
+            logfire.info(f"ContextManager: Closing context for {client_id}")
+            await managed_context.close()

@@ -148,9 +148,19 @@ class NexusVoiceClient:
     @logfire.instrument("Initialize Context Manager")
     def _initialize_context_manager(self):
         logger.info("Initializing context manager")
-        self._context_manager = RuntimeContextManager(
-            api=self._api,
-            context_timeout=self.config.get("nexus.client.context_timeout", 15)
+        self._context_manager = RuntimeContextManager()
+        assert self._api is not None, "API not initialized"
+        run_context_provider = self._api.run_context
+        history_context_provider = self._api.history_context
+        self._context_manager.add_context(
+            "api-context",
+            run_context_provider,
+            self.config.get("nexus.client.context_timeout", 300)
+        )
+        self._context_manager.add_context(
+            "history-context",
+            history_context_provider,
+            self.config.get("nexus.client.history_context_timeout", 60)
         )
 
     @logfire.instrument("Initialize Audio Device")
@@ -560,6 +570,7 @@ class NexusVoiceClient:
 
     async def stop(self):
         if not self.running:
+            logger.warning("Client is not running")
             return await asyncio.sleep(0)
 
         logger.info(f"Stopping {self.name}")

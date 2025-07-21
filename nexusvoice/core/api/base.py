@@ -11,13 +11,12 @@ class ModelResponse(PydanticModelResponse):
 
 from typing import TypeVar, Generic
 
-T = TypeVar("T", bound="NexusAPIContext")
+T = TypeVar("T")
 
-class NexusAPIContext(AbstractAsyncContextManager, Generic[T], ABC):
+class AsyncContext(AbstractAsyncContextManager, Generic[T], ABC):
     """
-    Abstract base for all API session contexts.
-    Concrete subclasses should define fields/resources relevant to their implementation.
-    Implements a generic async context manager protocol so that __aenter__ returns the concrete type.
+    Generic async context manager base.
+    Subclasses define what type __aenter__ returns.
     """
     @abstractmethod
     async def __aenter__(self) -> T:
@@ -27,8 +26,26 @@ class NexusAPIContext(AbstractAsyncContextManager, Generic[T], ABC):
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         pass
 
-# For backward compatibility, alias NexusContextManager to NexusAPIContext
-NexusContextManager = NexusAPIContext
+NexusAPIContextType = TypeVar("NexusAPIContextType")
+
+class NexusAPIContext(AsyncContext[NexusAPIContextType], ABC):
+    """
+    Abstract base for all API session contexts.
+    Concrete subclasses should define fields/resources relevant to their implementation.
+    Implements a generic async context manager protocol so that __aenter__ returns the concrete type.
+    """
+    pass
+
+NexusHistoryContextType = TypeVar("NexusHistoryContextType")
+
+class NexusHistoryContext(AsyncContext[NexusHistoryContextType], ABC):
+    """
+    Abstract base for all chat history contexts.
+    Concrete subclasses should define fields/resources relevant to their implementation.
+    Implements a generic async context manager protocol so that __aenter__ returns the concrete type.
+    """
+    pass
+    
 
 class NexusAPI(ABC):
     """A class to interact with the Nexus API."""
@@ -49,6 +66,14 @@ class NexusAPI(ABC):
         """
         Returns an async context manager for a Nexus API session.
         Should yield a NexusAPIContext instance, which holds session state/resources.
+        """
+        pass
+
+    @abstractmethod
+    async def history_context(self) -> NexusHistoryContext:
+        """
+        Returns an async context manager for a Nexus chat history.
+        Should yield a NexusHistoryContext instance, which holds session state/resources.
         """
         pass
     

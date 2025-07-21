@@ -3,6 +3,7 @@ from contextlib import AsyncExitStack
 import logfire
 import shlex
 from typing import Optional
+from nexusvoice.core.api.base import NexusHistoryContext
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.messages import ModelMessage
 
@@ -57,15 +58,13 @@ class Prefix:
         
         return cls._prefix_counts[prefix]
 
-class NexusAPIOnlineContext(NexusAPIContext["NexusAPIOnlineContext"]):
-    def __init__(self, api: "NexusAPIOnline", agent_history: list[ModelMessage], extra_state: dict):
+class NexusOnlineAPIContext(NexusAPIContext["NexusOnlineAPIContext"]):
+    def __init__(self, api: "NexusAPIOnline"):
         self.api = api
-        self.agent_history = agent_history
-        self.extra_state = extra_state
         self._is_open = False
         self._stack = AsyncExitStack()
 
-    async def __aenter__(self) -> "NexusAPIOnlineContext":
+    async def __aenter__(self) -> "NexusOnlineAPIContext":
         await self._stack.__aenter__()
 
         agents = [
@@ -93,6 +92,20 @@ class NexusAPIOnlineContext(NexusAPIContext["NexusAPIOnlineContext"]):
 
     def is_open(self) -> bool:
         return self._is_open
+
+class NexusOnlineHistoryContext(NexusHistoryContext["NexusOnlineHistoryContext"]):
+    def __init__(self, agent_history: list[ModelMessage]):
+        self.agent_history = agent_history
+    
+    async def __aenter__(self) -> "NexusOnlineHistoryContext":
+        return self
+    
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        pass
+
+#==========================================================
+# Tools
+#==========================================================
 
 def home_control(ctx: RunContext[NexusSupportDependencies], intent: str, device: str, room: str) -> dict[str, str]:
     """
@@ -126,7 +139,8 @@ class NexusAPIOnline(NexusAPI):
         self._home_agent = None
         self._conversational_agent = None
 
-        self._context: Optional[NexusAPIOnlineContext] = None
+        self._context: Optional[NexusOnlineAPIContext] = None
+        self._history_context: Optional[NexusOnlineHistoryContext] = None
 
 
     async def initialize(self):
@@ -193,17 +207,13 @@ class NexusAPIOnline(NexusAPI):
 
         self._mcp_servers[name] = instance
 
-    async def run_context(self):
+    async def run_context(self) -> NexusOnlineAPIContext:
         """
         Returns an async context manager for a NexusAPIOnline session.
         Initializes MCP servers and attaches them to the context.
         """
-        agent_history = []
-        extra_state = {}
-        ctx = NexusAPIOnlineContext(
-            api=self,
-            agent_history=agent_history,
-            extra_state=extra_state,
+        ctx = NexusOnlineAPIContext(
+            api=self
         )
 
         # Check if the context is already initialized and open, and warn of 
@@ -215,14 +225,28 @@ class NexusAPIOnline(NexusAPI):
         self._context = ctx
         return ctx
 
+    async def history_context(self) -> NexusOnlineHistoryContext:
+        """
+        Returns an async context manager for a NexusOnlineHistory session.
+        """
+        agent_history = []
+        ctx = NexusOnlineHistoryContext(agent_history=agent_history)
+        self._history_context = ctx
+        return ctx
+
     @property
-    def context(self) -> NexusAPIOnlineContext:
+    def context(self) -> NexusOnlineAPIContext:
         """
         Returns the current context for the API session.
         It's expected that the API user is managing the context lifecycle and has called run_context() to initialize it.
         """
         assert self._context is not None, "Context not initialized"
         return self._context
+
+    @property
+    def history(self) -> NexusOnlineHistoryContext:
+        assert self._history_context is not None, "History context not initialized"
+        return self._history_context
 
     @property
     def classifier_agent(self) -> Agent[NexusSupportDependencies, RequestType]:
@@ -287,7 +311,10 @@ class NexusAPIOnline(NexusAPI):
     @logfire.instrument("Process Conversational")
     async def _process_conversational(self, text: str) -> str:
         logger.debug("Processing conversational request...")
-        message_history = self.context.agent_history
+        # message_history = self.context.agent_history
+        message_history = self.history.agent_history
+        
+        logger.info(f"Message history: {message_history}")
 
         result = await self.conversational_agent.run(
             text,
@@ -295,6 +322,7 @@ class NexusAPIOnline(NexusAPI):
             deps=self._deps)
 
         # Update the agent history
-        self.context.agent_history = result.all_messages()
+        # self.context.agent_history = result.all_messages()
+        self.history.agent_history = result.all_messages()
 
         return result.output.text
