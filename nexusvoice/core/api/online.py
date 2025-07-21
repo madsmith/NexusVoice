@@ -207,7 +207,7 @@ class NexusAPIOnline(NexusAPI):
 
         self._mcp_servers[name] = instance
 
-    async def run_context(self) -> NexusOnlineAPIContext:
+    async def create_api_context(self) -> NexusOnlineAPIContext:
         """
         Returns an async context manager for a NexusAPIOnline session.
         Initializes MCP servers and attaches them to the context.
@@ -225,7 +225,7 @@ class NexusAPIOnline(NexusAPI):
         self._context = ctx
         return ctx
 
-    async def history_context(self) -> NexusOnlineHistoryContext:
+    async def create_history_context(self) -> NexusOnlineHistoryContext:
         """
         Returns an async context manager for a NexusOnlineHistory session.
         """
@@ -235,16 +235,16 @@ class NexusAPIOnline(NexusAPI):
         return ctx
 
     @property
-    def context(self) -> NexusOnlineAPIContext:
+    def api_context(self) -> NexusOnlineAPIContext:
         """
         Returns the current context for the API session.
-        It's expected that the API user is managing the context lifecycle and has called run_context() to initialize it.
+        It's expected that the API user is managing the context lifecycle and has called create_api_context() to initialize it.
         """
         assert self._context is not None, "Context not initialized"
         return self._context
 
     @property
-    def history(self) -> NexusOnlineHistoryContext:
+    def history_context(self) -> NexusOnlineHistoryContext:
         assert self._history_context is not None, "History context not initialized"
         return self._history_context
 
@@ -311,10 +311,7 @@ class NexusAPIOnline(NexusAPI):
     @logfire.instrument("Process Conversational")
     async def _process_conversational(self, text: str) -> str:
         logger.debug("Processing conversational request...")
-        # message_history = self.context.agent_history
-        message_history = self.history.agent_history
-        
-        logger.info(f"Message history: {message_history}")
+        message_history = self.history_context.agent_history
 
         result = await self.conversational_agent.run(
             text,
@@ -322,7 +319,6 @@ class NexusAPIOnline(NexusAPI):
             deps=self._deps)
 
         # Update the agent history
-        # self.context.agent_history = result.all_messages()
-        self.history.agent_history = result.all_messages()
+        self.history_context.agent_history = result.all_messages()
 
         return result.output.text

@@ -150,8 +150,8 @@ class NexusVoiceClient:
         logger.info("Initializing context manager")
         self._context_manager = RuntimeContextManager()
         assert self._api is not None, "API not initialized"
-        run_context_provider = self._api.run_context
-        history_context_provider = self._api.history_context
+        run_context_provider = self._api.create_api_context
+        history_context_provider = self._api.create_history_context
         self._context_manager.add_context(
             "api-context",
             run_context_provider,

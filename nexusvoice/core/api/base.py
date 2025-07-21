@@ -62,7 +62,7 @@ class NexusAPI(ABC):
         pass
 
     @abstractmethod
-    async def run_context(self) -> NexusAPIContext:
+    async def create_api_context(self) -> NexusAPIContext:
         """
         Returns an async context manager for a Nexus API session.
         Should yield a NexusAPIContext instance, which holds session state/resources.
@@ -70,7 +70,7 @@ class NexusAPI(ABC):
         pass
 
     @abstractmethod
-    async def history_context(self) -> NexusHistoryContext:
+    async def create_history_context(self) -> NexusHistoryContext:
         """
         Returns an async context manager for a Nexus chat history.
         Should yield a NexusHistoryContext instance, which holds session state/resources.
