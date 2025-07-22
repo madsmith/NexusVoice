@@ -25,7 +25,6 @@ class NexusConnection:
         self.reader: Optional[asyncio.StreamReader] = None
         self.writer: Optional[asyncio.StreamWriter] = None
 
-
         self.connection_id: uuid.UUID | None = None
         self.call_id: int = 0
         self.pending_calls: Dict[str, asyncio.Future] = {}
@@ -175,7 +174,6 @@ class NexusConnection:
         loop = asyncio.get_running_loop()
         future = loop.create_future()
 
-        
         try:
             # Send command to server
             data = call_request.model_dump_json().encode() + b'\n'
@@ -199,7 +197,6 @@ class NexusConnection:
         finally:
             self.pending_calls.pop(request_id, None)
 
-    
     async def ping(self):
         """Send a ping command to the server"""
         print("Sending ping to server...")
