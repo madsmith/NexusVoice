@@ -74,7 +74,8 @@ class NexusConnection:
                         self.writer = None
                         logfire.info("Disconnected from server")
             except Exception as e:
-                logfire.error(f"Error during disconnect: {e}")
+                error_msg = f"Error during disconnect: {e}"
+                logfire.error(error_msg)
         
         self.connection_id = None
         self.call_id = 0
@@ -127,8 +128,8 @@ class NexusConnection:
         if isinstance(msg, CallResponse):  # Use parent class directly for type checking
             await self._process_response(msg)
         elif isinstance(msg, BroadcastMessage):
-            logfire.info(f"\nBroadcast: {msg.message}")
-            print("nexus> ", end="", flush=True)
+            response_msg = msg.message
+            logfire.info(f"Broadcast: {response_msg}")
         else:
             warning_msg = f"Unhandled message type: [{type(msg)}] {msg}"
             logfire.warning(warning_msg)
@@ -182,7 +183,7 @@ class NexusConnection:
                 self.writer.write(data)
                 await self.writer.drain()
         except Exception as e:
-            print(f"Error sending command: {e}")
+            logfire.error(f"Error sending command: {e}")
             self.pending_calls.pop(request_id, None)
             await self.disconnect()
             raise
@@ -199,10 +200,10 @@ class NexusConnection:
 
     async def ping(self):
         """Send a ping command to the server"""
-        print("Sending ping to server...")
+        logfire.info("Sending ping to server...")
         return await self.send_command("ping")
 
     async def queue_broadcast(self):
         """Send a queue broadcast command to the server"""
-        print("Sending queue broadcast to server...")
+        logfire.info("Sending queue broadcast to server...")
         return await self.send_command("queue_broadcast")

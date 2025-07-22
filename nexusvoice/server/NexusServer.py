@@ -1,7 +1,10 @@
 import asyncio
+import importlib
+import inspect
 import json
 import logfire
-from typing import Dict, Callable, Any
+import pkgutil
+from typing import Dict, Callable, Any, Awaitable, Union, List, Type
 from pydantic import ValidationError
 from pydantic.type_adapter import TypeAdapter
 
@@ -9,30 +12,40 @@ from .types import (
     CallRequest, CallResponse, CallResponseSuccess, CallResponseError, 
     BroadcastMessage, ServerInboundMessage
 )
+from .tasks.base import NexusTask
 
 inbound_message_adapter = TypeAdapter(ServerInboundMessage)
+
+CommandHandlerT = Callable[[Any], Union[Any, Awaitable[Any]]]
 
 class NexusServer:
     def __init__(self, host: str, port: int):
         self.host = host
         self.port = port
+        self.server = None
         self.server_socket = None
         self.clients: Dict[str, asyncio.StreamWriter] = {}
         self.running = False
 
+        self.tasks: List[NexusTask] = []
+
         self.lock = asyncio.Lock()
         
         # Command handlers
-        self.command_handlers: Dict[str, Callable] = {
+        self.command_handlers: Dict[str, CommandHandlerT] = {
             "ping": self._handle_ping,
             "queue_broadcast": self._handle_queue_broadcast
         }
 
     async def start(self):
         """Initialize the server socket and start listening for connections"""
+        # Discover and initialize tasks
+        await self._discover_tasks()
+        
         self.server = await asyncio.start_server(
             self._handle_client, self.host, self.port
         )
+
         logfire.info(f"Server started on {self.host}:{self.port}")
         self.running = True
         
@@ -61,22 +74,81 @@ class NexusServer:
         
         logfire.info("Server stopped")
 
+    def register_command(self, command: str, handler: CommandHandlerT):
+        """Register a command handler"""
+        if command in self.command_handlers:
+            raise ValueError(f"Command {command} is already registered")
+        self.command_handlers[command] = handler
+        
+    async def _discover_tasks(self):
+        """Discover, instantiate, and register NexusTask classes"""
+        import nexusvoice.server.tasks as tasks_module
+        
+        # Find all submodules in the tasks package
+        for _, name, is_pkg in pkgutil.iter_modules(tasks_module.__path__, tasks_module.__name__ + "."):
+            if not is_pkg and name != tasks_module.__name__ + ".base":
+                try:
+                    # Import the module
+                    module = importlib.import_module(name)
+                    
+                    # Find all NexusTask subclasses in the module
+                    for attr_name in dir(module):
+                        attr = getattr(module, attr_name)
+                        if (inspect.isclass(attr) and issubclass(attr, NexusTask) and attr != NexusTask):
+                            # Instantiate the task
+                            task = attr(self)
+                            logfire.info(f"Discovered task: {attr.__name__}")
+                            self.tasks.append(task)
+                except Exception as e:
+                    logfire.error(f"Error loading task module {name}: {e}")
+        
+        # Register all tasks
+        for task in self.tasks:
+            try:
+                task.register()
+                logfire.info(f"Registered task: {task.__class__.__name__}")
+            except Exception as e:
+                logfire.error(f"Error registering task {task.__class__.__name__}: {e}")
+                self.tasks.remove(task)
+                
+    async def _stop_tasks(self):
+        """Stop all running tasks"""
+        for task in self.tasks:
+            try:
+                await task.stop()
+                logfire.info(f"Stopped task: {task.__class__.__name__}")
+            except Exception as e:
+                logfire.error(f"Error stopping task {task.__class__.__name__}: {e}")
+
     async def _main_loop(self):
         """Main server loop"""
         with logfire.span("NexusServer Running"):
+            # Start task coroutines but don't await them yet
+            task_coros = [task.start() for task in self.tasks]
+            tasks = []
+            
             try:
-                # Keep the server running until stop is called
-                while self.running:
-                    await asyncio.sleep(1)
+                # Start all tasks
+                for coro in task_coros:
+                    tasks.append(asyncio.create_task(coro))
+                    
+                # Keep the server running until it is cancelled
+                await asyncio.Future()
             except asyncio.CancelledError:
                 logfire.info("Server loop cancelled")
-                self.running = False
-            except Exception as e:
-                error_msg = f"Error in server main loop: {e}"
-                logfire.error(error_msg)
-                self.running = False
             finally:
-                await self.stop()
+                # Stop all tasks
+                for task in tasks:
+                    if not task.done():
+                        task.cancel()
+                
+                # Wait for all tasks to be cancelled
+                if tasks:
+                    await asyncio.gather(*tasks, return_exceptions=True)
+                
+                # Call stop on all task objects
+                await self._stop_tasks()
+
     
     async def _handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         """Handle a new client connection"""
