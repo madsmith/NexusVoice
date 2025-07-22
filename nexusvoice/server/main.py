@@ -25,13 +25,14 @@ async def run_server(args: argparse.Namespace):
             await server.start()
     except KeyboardInterrupt:
         logger.warning(f"Exiting due to KeyboardInterrupt")
-        if server:
-            await server.stop()
+    except OSError as e:
+        logger.error(f"Error starting server: {e}")
     except Exception as e:
         logger.error(f"Error running server: {e}")
         import traceback
         traceback.print_exc()
-        if server:
+    finally:
+        if server and server.running:
             await server.stop()
 
 def main():
