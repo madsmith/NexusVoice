@@ -3,10 +3,13 @@ import asyncio
 import json
 import logfire
 from pydantic import ValidationError
+from pydantic.type_adapter import TypeAdapter
 from typing import Dict, Any, Optional, Callable, List, Set
 import uuid
 
-from .types import CallRequest, CallResponse, BroadcastMessage, Message, message_adapter
+from .types import CallRequest, CallResponse, BroadcastMessage, ClientInboundMessage
+
+message_adapter = TypeAdapter(ClientInboundMessage)
 
 class NexusConnection:
     """
@@ -27,12 +30,6 @@ class NexusConnection:
 
         self.running = False
         self.read_task = None
-        self.message_queue = asyncio.Queue()
-        self.message_handlers: Dict[str, Callable] = {}
-        
-        # Register default message handlers
-        self.register_message_handler("ping_response", self._handle_ping_response)
-        self.register_message_handler("queue_broadcast_response", self._handle_queue_broadcast_response)
     
     async def connect(self) -> bool:
         """Connect to the NexusServer"""
@@ -132,11 +129,7 @@ class NexusConnection:
             logfire.info(f"\nBroadcast: {msg.message}")
             print("nexus> ", end="", flush=True)
         else:
-            logfire.warning(f"Unhandled message type: {msg}")
-            
-    def register_message_handler(self, command: str, handler: Callable):
-        """Register a handler for a specific message command"""
-        self.message_handlers[command] = handler
+            logfire.warning(f"Unhandled message type: [{type(msg)}] {msg}")
     
     async def send_command(
         self,
@@ -198,16 +191,8 @@ class NexusConnection:
         """Send a ping command to the server"""
         print("Sending ping to server...")
         return await self.send_command("ping")
-    
-    async def _handle_ping_response(self, message: dict):
-        """Handle ping response from server"""
-        print(f"Server ping response: {json.dumps(message, indent=2)}")
 
     async def queue_broadcast(self):
         """Send a queue broadcast command to the server"""
         print("Sending queue broadcast to server...")
-        await self.send_command("queue_broadcast")
-        
-    async def _handle_queue_broadcast_response(self, message: dict):
-        """Handle queue broadcast response from server"""
-        print(f"Server queue broadcast response: {json.dumps(message, indent=2)}")
+        return await self.send_command("queue_broadcast")

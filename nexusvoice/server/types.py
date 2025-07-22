@@ -1,5 +1,5 @@
 from typing import Literal, Union, Annotated
-from pydantic import BaseModel, Field, TypeAdapter
+from pydantic import BaseModel, Field
 
 class CallRequest(BaseModel):
     msg_type: Literal["call_request"] = "call_request"
@@ -10,16 +10,24 @@ class CallRequest(BaseModel):
 class CallResponse(BaseModel):
     msg_type: Literal["call_response"] = "call_response"
     request_id: str
-    status: str  # Consider Literal["ok", "error"]
+    status: Literal["ok", "error"]
     result: str
 
 class BroadcastMessage(BaseModel):
     msg_type: Literal["broadcast"] = "broadcast"
     message: str
 
-Message = Annotated[
-    Union[CallRequest, CallResponse, BroadcastMessage],
+ServerInboundMessage = Annotated[
+    Union[CallRequest],
     Field(discriminator="msg_type")
 ]
 
-message_adapter = TypeAdapter(Message)
+ClientInboundMessage = Annotated[
+    Union[CallResponse, BroadcastMessage],
+    Field(discriminator="msg_type")
+]
+
+Message = Annotated[
+    Union[ServerInboundMessage, ClientInboundMessage],
+    Field(discriminator="msg_type")
+]
