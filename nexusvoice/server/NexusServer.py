@@ -1,11 +1,14 @@
 import asyncio
 import json
 import logfire
-from typing import Dict, Callable
+from typing import Dict, Callable, Any
 from pydantic import ValidationError
 from pydantic.type_adapter import TypeAdapter
 
-from .types import CallRequest, CallResponse, BroadcastMessage, ServerInboundMessage
+from .types import (
+    CallRequest, CallResponse, CallResponseSuccess, CallResponseError, 
+    BroadcastMessage, ServerInboundMessage
+)
 
 inbound_message_adapter = TypeAdapter(ServerInboundMessage)
 
@@ -27,11 +30,11 @@ class NexusServer:
 
     async def start(self):
         """Initialize the server socket and start listening for connections"""
-        self.running = True
         self.server = await asyncio.start_server(
             self._handle_client, self.host, self.port
         )
         logfire.info(f"Server started on {self.host}:{self.port}")
+        self.running = True
         
         async with self.server:
             await self._main_loop()
@@ -47,8 +50,9 @@ class NexusServer:
                     writer.close()
                     await writer.wait_closed()
                 except Exception as e:
-                    print(f"Error closing connection for {client_id}: {e}")
-                    logfire.error(f"Error closing connection for {client_id}: {e}")
+                    # Don't allow inspection during shutdown, format message manually
+                    error_msg = f"Error closing connection for {client_id}: {e}"
+                    logfire.error(error_msg)
         
             # Close server
             if self.server:
@@ -68,7 +72,8 @@ class NexusServer:
                 logfire.info("Server loop cancelled")
                 self.running = False
             except Exception as e:
-                logfire.error(f"Error in server main loop: {e}")
+                error_msg = f"Error in server main loop: {e}"
+                logfire.error(error_msg)
                 self.running = False
             finally:
                 await self.stop()
@@ -113,10 +118,10 @@ class NexusServer:
                 msg = inbound_message_adapter.validate_json(data)
             except ValidationError as e:
                 logfire.error(f"Invalid message from client {client_id}: {data.decode(errors='replace')} :: {e}")
-                error_response = CallResponse(
+                error_response = CallResponseError(
                     request_id="ERROR",
-                    status="error",
-                    result="Invalid JSON format"
+                    error="Invalid JSON format",
+                    details={"raw_data": data.decode(errors='replace')}
                 )
                 await self._send_response(writer, error_response)
                 return
@@ -126,22 +131,21 @@ class NexusServer:
                 if handler:
                     try:
                         result = await handler(client_id, msg.payload)
-                        response = CallResponse(
+                        response = CallResponseSuccess(
                             request_id=msg.request_id,
-                            status="ok",
                             result=result
                         )
                     except Exception as e:
-                        response = CallResponse(
+                        response = CallResponseError(
                             request_id=msg.request_id,
-                            status="error",
-                            result=f"Handler error: {e}"
+                            error=f"Command execution error",
+                            details={"exception": str(e)}
                         )
                 else:
-                    response = CallResponse(
+                    response = CallResponseError(
                         request_id=msg.request_id,
-                        status="error",
-                        result=f"Unknown command: {msg.command}"
+                        error=f"Unknown command",
+                        details={"command": msg.command}
                     )
                 await self._send_response(writer, response)
 
@@ -167,7 +171,7 @@ class NexusServer:
         logfire.info(f"Queue broadcast from {client_id}")
         # defer queue a broadcast message in 2 seconds
         async def do_broadcast():
-            await asyncio.sleep(2)
+            await asyncio.sleep(4)
             await self.broadcast(BroadcastMessage(message="Hello from NexusServer"))
 
         asyncio.create_task(do_broadcast())

@@ -4,10 +4,13 @@ import json
 import logfire
 from pydantic import ValidationError
 from pydantic.type_adapter import TypeAdapter
-from typing import Dict, Any, Optional, Callable, List, Set
+from typing import Dict, Any, Optional, Callable, List, Set, Awaitable
 import uuid
 
-from .types import CallRequest, CallResponse, BroadcastMessage, ClientInboundMessage
+from .types import (
+    CallRequest, CallResponse, CallResponseSuccess, CallResponseError,
+    BroadcastMessage, ClientInboundMessage
+)
 
 message_adapter = TypeAdapter(ClientInboundMessage)
 
@@ -44,7 +47,7 @@ class NexusConnection:
             self.read_task = asyncio.create_task(self._read_messages())
             
             return True
-        except ConnectionRefusedError:
+        except (ConnectionRefusedError, OSError) as e:
             logfire.error(f"Connection refused. Is the server running at {self.host}:{self.port}?")
         except Exception as e:
             logfire.error(f"Connection error: {e}")
@@ -108,7 +111,8 @@ class NexusConnection:
             # Task was cancelled, this is expected during shutdown
             pass
         except Exception as e:
-            logfire.error(f"Error in message reading task: {e}")
+            error_msg = f"Error in message reading task: {e}"
+            logfire.error(error_msg)
         finally:
             await self.disconnect()
             
@@ -117,19 +121,28 @@ class NexusConnection:
         try:
             msg = message_adapter.validate_json(data)
         except ValidationError as e:
-            logfire.error(f"Invalid message from server: {data.decode(errors='replace')} :: {e}")
+            error_msg = f"Invalid message from server: {data.decode(errors='replace')} :: {e}"
+            logfire.error(error_msg)
             return
 
-        if isinstance(msg, CallResponse):
-            future = self.pending_calls.get(msg.request_id)
-            if future and not future.done():
-                future.set_result(msg)
-            return
+        if isinstance(msg, CallResponse):  # Use parent class directly for type checking
+            await self._process_response(msg)
         elif isinstance(msg, BroadcastMessage):
             logfire.info(f"\nBroadcast: {msg.message}")
             print("nexus> ", end="", flush=True)
         else:
-            logfire.warning(f"Unhandled message type: [{type(msg)}] {msg}")
+            warning_msg = f"Unhandled message type: [{type(msg)}] {msg}"
+            logfire.warning(warning_msg)
+    
+    async def _process_response(self, response: CallResponse):
+        """Process a response from the server"""
+        # Look for a pending request with matching ID
+        if response.request_id in self.pending_calls:
+            future = self.pending_calls.get(response.request_id)
+            if future and not future.done():
+                future.set_result(response)
+                return True
+        return False
     
     async def send_command(
         self,

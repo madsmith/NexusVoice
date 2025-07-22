@@ -13,7 +13,7 @@ from prompt_toolkit.history import FileHistory
 from nexusvoice.bootstrap import get_logfire
 
 from .connection import NexusConnection
-from .types import CallResponse
+from .types import CallResponseSuccess, CallResponseError
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ class REPLClient:
         # Setup command history
         history_path = os.path.expanduser("~/.nexus_client_history")
         self.history = FileHistory(history_path)
-        self.prompt = PromptSession(history=self.history)
+        self.prompt = PromptSession[str](history=self.history)
 
         self.command_map = {
             "ping": self.connection.ping,
@@ -38,6 +38,7 @@ class REPLClient:
     async def start(self):
         """Start the REPL interface"""
         self.running = True
+        show_connect_prompt = True
         
         print("NexusClient REPL")
         print("Type 'help' for available commands or 'exit' to quit")
@@ -48,8 +49,9 @@ class REPLClient:
         
         while self.running:
             # Check if we're connected (for reconnection after a disconnect)
-            if not self.connection.connected:
+            if not self.connection.connected and show_connect_prompt:
                 try:
+                    show_connect_prompt = False
                     choice = await self.prompt.prompt_async("Not connected to server. Connect now? (y/n): ")
                     choice = choice.strip().lower()
                     if choice == 'y':
@@ -57,7 +59,7 @@ class REPLClient:
                             continue
                     else:
                         print("You can still use local commands. Type 'connect' to connect later.")
-                except KeyboardInterrupt:
+                except (KeyboardInterrupt, EOFError):
                     print("\nExiting...")
                     self.running = False
                     break
@@ -98,11 +100,17 @@ class REPLClient:
                 print(f"Server address: {self.connection.host}:{self.connection.port}")
                 
             elif cmd_name in self.command_map:
+                if not self.connection.connected:
+                    print("Error: Not connected to server.")
+                    show_connect_prompt = True
+                    continue
                 response = await self.command_map[cmd_name]()
-                if isinstance(response, CallResponse):
+                if isinstance(response, CallResponseSuccess):
                     print(f"{response.result}")
+                elif isinstance(response, CallResponseError):
+                    print(f"{cmd_name} failed: {response.error}")
                 else:
-                    print(f"{cmd_name} result: {response}")
+                    print(f"{cmd_name} failed: {response}")
 
             else:
                 print(f"Unknown command: {cmd_name}")
@@ -111,20 +119,10 @@ class REPLClient:
         # Clean up when exiting
         if self.connection.connected:
             await self.connection.disconnect()
-        try:
-            readline.write_history_file(self.history_file)
-        except Exception:
-            pass
     
     async def stop(self):
         self.running = False
         self.shutdown_event.set()  # Signal any pending input to exit
-
-        # Shutdown REPL
-        try:
-            readline.write_history_file(self.history_file)
-        except Exception:
-            pass
 
         if self.connection.connected:
             await self.connection.disconnect()
