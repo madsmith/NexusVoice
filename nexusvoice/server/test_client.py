@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import argparse
-from aioconsole import ainput
 import asyncio
 import os
 import signal
@@ -8,6 +7,8 @@ import readline
 import logfire
 import logging
 from pathlib import Path
+from prompt_toolkit import PromptSession
+from prompt_toolkit.history import FileHistory
 
 from nexusvoice.bootstrap import get_logfire
 
@@ -25,27 +26,18 @@ class REPLClient:
         self.shutdown_event = asyncio.Event()
         
         # Setup command history
-        self.history_file = os.path.expanduser("~/.nexus_client_history")
-        try:
-            readline.read_history_file(self.history_file)
-        except FileNotFoundError:
-            pass
+        history_path = os.path.expanduser("~/.nexus_client_history")
+        self.history = FileHistory(history_path)
+        self.prompt = PromptSession(history=self.history)
+
+        self.command_map = {
+            "ping": self.connection.ping,
+            "queue_broadcast": self.connection.queue_broadcast,
+        }
     
     async def start(self):
         """Start the REPL interface"""
         self.running = True
-        
-        # Register asyncio signal handler instead of using signal.signal directly
-        loop = asyncio.get_running_loop()
-        
-        def handle_sigint():
-            logger.info("Received SIGINT or SIGTERM, shutting down...")
-            # Create a task to call the async stop method
-            asyncio.create_task(self.stop())
-        
-        # Use add_signal_handler which works within asyncio
-        for sig in (signal.SIGINT, signal.SIGTERM):
-            loop.add_signal_handler(sig, handle_sigint)
         
         print("NexusClient REPL")
         print("Type 'help' for available commands or 'exit' to quit")
@@ -58,7 +50,7 @@ class REPLClient:
             # Check if we're connected (for reconnection after a disconnect)
             if not self.connection.connected:
                 try:
-                    choice = await self.prompt_input("Not connected to server. Connect now? (y/n): ")
+                    choice = await self.prompt.prompt_async("Not connected to server. Connect now? (y/n): ")
                     choice = choice.strip().lower()
                     if choice == 'y':
                         if not await self.connection.connect():
@@ -72,12 +64,10 @@ class REPLClient:
             
             # Get command input
             try:
-                cmd = await self.prompt_input("nexus> ")
+                cmd = await self.prompt.prompt_async("nexus> ")
                 cmd = cmd.strip()
             except KeyboardInterrupt:
-                print("\nExiting...")
-                self.running = False
-                break
+                continue
             except EOFError:
                 print("\nExiting...")
                 self.running = False
@@ -103,20 +93,17 @@ class REPLClient:
             elif cmd_name == 'disconnect':
                 await self.connection.disconnect()
                 
-            elif cmd_name == 'ping':
-                response = await self.connection.ping()
-                if isinstance(response, CallResponse):
-                    print(f"{response.result}")
-                else:
-                    print(f"Ping result: {response}")
-
-            elif cmd_name == "queue_broadcast":
-                await self.connection.queue_broadcast()
-                
             elif cmd_name == 'status':
                 print(f"Connected: {self.connection.connected}")
                 print(f"Server address: {self.connection.host}:{self.connection.port}")
                 
+            elif cmd_name in self.command_map:
+                response = await self.command_map[cmd_name]()
+                if isinstance(response, CallResponse):
+                    print(f"{response.result}")
+                else:
+                    print(f"{cmd_name} result: {response}")
+
             else:
                 print(f"Unknown command: {cmd_name}")
                 print("Type 'help' for available commands")
@@ -153,25 +140,9 @@ class REPLClient:
         print("  status         - Show connection status")
         print("  exit, quit     - Exit the client")
         print()
-
-    async def prompt_input(self, prompt: str) -> str:
-        try:
-            input_task = asyncio.create_task(ainput(prompt))
-            shutdown_task = asyncio.create_task(self.shutdown_event.wait())
-
-            done, _ = await asyncio.wait(
-                {input_task, shutdown_task}, return_when=asyncio.FIRST_COMPLETED
-            )
-
-            if shutdown_task in done:
-                input_task.cancel()
-                raise KeyboardInterrupt("Shutdown requested")
-
-            return await input_task
-        except asyncio.CancelledError:
-            raise KeyboardInterrupt("Input task cancelled during shutdown")
             
 async def run_repl(args: argparse.Namespace):
+    # Give some time for logfire to initialize
     await asyncio.sleep(.2)
 
     # Create and start client
