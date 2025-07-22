@@ -1,0 +1,213 @@
+#!/usr/bin/env python3
+import asyncio
+import json
+import logfire
+from pydantic import ValidationError
+from typing import Dict, Any, Optional, Callable, List, Set
+import uuid
+
+from .types import CallRequest, CallResponse, BroadcastMessage, Message, message_adapter
+
+class NexusConnection:
+    """
+    A bi-directional connection to the NexusServer that handles both sending
+    commands and asynchronously receiving messages from the server.
+    """
+    def __init__(self, host: str, port: int):
+        self.host = host
+        self.port = port
+        self.reader: Optional[asyncio.StreamReader] = None
+        self.writer: Optional[asyncio.StreamWriter] = None
+
+
+        self.connection_id: uuid.UUID | None = None
+        self.call_id: int = 0
+        self.pending_calls: Dict[str, asyncio.Future] = {}
+        self.lock = asyncio.Lock()
+
+        self.running = False
+        self.read_task = None
+        self.message_queue = asyncio.Queue()
+        self.message_handlers: Dict[str, Callable] = {}
+        
+        # Register default message handlers
+        self.register_message_handler("ping_response", self._handle_ping_response)
+        self.register_message_handler("queue_broadcast_response", self._handle_queue_broadcast_response)
+    
+    async def connect(self) -> bool:
+        """Connect to the NexusServer"""
+        try:
+            logfire.info(f"Connecting to server at {self.host}:{self.port}...")
+            self.reader, self.writer = await asyncio.open_connection(self.host, self.port)
+            self.connection_id = uuid.uuid4()
+            self.call_id = 0
+            logfire.info("Connected successfully!")
+            
+            # Start the message reading task
+            self.read_task = asyncio.create_task(self._read_messages())
+            
+            return True
+        except ConnectionRefusedError:
+            logfire.error(f"Connection refused. Is the server running at {self.host}:{self.port}?")
+        except Exception as e:
+            logfire.error(f"Connection error: {e}")
+        
+        # Connection failed
+        self.connection_id = None
+        self.call_id = 0
+        return False
+    
+    async def disconnect(self):
+        """Disconnect from the server"""
+        if self.read_task:
+            self.read_task.cancel()
+            try:
+                await self.read_task
+            except asyncio.CancelledError:
+                pass
+            self.read_task = None
+            
+            try:
+                async with self.lock:
+                    if self.writer:
+                        self.writer.close()
+                        await self.writer.wait_closed()
+                        self.writer = None
+                        logfire.info("Disconnected from server")
+            except Exception as e:
+                logfire.error(f"Error during disconnect: {e}")
+        
+        self.connection_id = None
+        self.call_id = 0
+    
+    @property
+    def connected(self):
+        """Check if we are connected to the server"""
+        return self.connection_id is not None
+    
+    def get_task(self):
+        """Get the message reading task"""
+        return self.read_task
+    
+    async def _read_messages(self):
+        """Background task to continuously read messages from the server"""
+        try:
+            while self.connected and self.reader:
+                # Read a line from the server
+                data = await self.reader.readline()
+                
+                if not data:  # Connection closed
+                    logfire.info("\nServer closed the connection")
+                    break
+                    
+                # Process the message
+                try:
+                    await self._process_server_message(data)
+                except json.JSONDecodeError:
+                    logfire.error(f"Received invalid JSON: {data.decode().strip()}")
+                except Exception as e:
+                    logfire.error(f"Error processing message: {e}")
+        except asyncio.CancelledError:
+            # Task was cancelled, this is expected during shutdown
+            pass
+        except Exception as e:
+            logfire.error(f"Error in message reading task: {e}")
+        finally:
+            await self.disconnect()
+            
+    async def _process_server_message(self, data: bytes):
+        """Process a message received from the server"""
+        try:
+            msg = message_adapter.validate_json(data)
+        except ValidationError as e:
+            logfire.error(f"Invalid message from server: {data.decode(errors='replace')} :: {e}")
+            return
+
+        if isinstance(msg, CallResponse):
+            future = self.pending_calls.get(msg.request_id)
+            if future and not future.done():
+                future.set_result(msg)
+            return
+        elif isinstance(msg, BroadcastMessage):
+            logfire.info(f"\nBroadcast: {msg.message}")
+            print("nexus> ", end="", flush=True)
+        else:
+            logfire.warning(f"Unhandled message type: {msg}")
+            
+    def register_message_handler(self, command: str, handler: Callable):
+        """Register a handler for a specific message command"""
+        self.message_handlers[command] = handler
+    
+    async def send_command(
+        self,
+        command: str,
+        payload: Dict[str, Any] | None = None,
+        timeout: float = 10.0
+    ) -> Any:
+        """
+        Send a command to the server without waiting for a response
+        Responses will be handled by the background message processing task
+        """
+        if not self.connected or not self.writer:
+            logfire.error("Send Command Error: Not connected to server")
+            return
+        assert self.connection_id is not None
+
+        if payload is None:
+            payload = {}
+        
+        call_name = f"call_{self.call_id}"
+        self.call_id += 1
+        request_id = str(uuid.uuid5(self.connection_id, call_name))
+
+        call_request = CallRequest(
+            request_id=request_id,
+            command=command,
+            payload=payload
+        )
+        
+        loop = asyncio.get_running_loop()
+        future = loop.create_future()
+
+        
+        try:
+            # Send command to server
+            data = call_request.model_dump_json().encode() + b'\n'
+            async with self.lock:
+                self.pending_calls[request_id] = future
+                self.writer.write(data)
+                await self.writer.drain()
+        except Exception as e:
+            print(f"Error sending command: {e}")
+            self.pending_calls.pop(request_id, None)
+            await self.disconnect()
+            raise
+
+        try:
+            result = await asyncio.wait_for(future, timeout)
+            return result
+        except asyncio.TimeoutError:
+            logfire.error(f"Command {command} timed out after {timeout} seconds")
+            future.cancel()
+            raise
+        finally:
+            self.pending_calls.pop(request_id, None)
+
+    
+    async def ping(self):
+        """Send a ping command to the server"""
+        print("Sending ping to server...")
+        return await self.send_command("ping")
+    
+    async def _handle_ping_response(self, message: dict):
+        """Handle ping response from server"""
+        print(f"Server ping response: {json.dumps(message, indent=2)}")
+
+    async def queue_broadcast(self):
+        """Send a queue broadcast command to the server"""
+        print("Sending queue broadcast to server...")
+        await self.send_command("queue_broadcast")
+        
+    async def _handle_queue_broadcast_response(self, message: dict):
+        """Handle queue broadcast response from server"""
+        print(f"Server queue broadcast response: {json.dumps(message, indent=2)}")

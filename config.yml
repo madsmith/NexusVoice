@@ -1,4 +1,8 @@
 nexus:
+  server:
+    host: 0.0.0.0
+    port: 8008
+    
   client:
     no_response_error: "Something went wrong, there is no response."
     context_timeout: 30
