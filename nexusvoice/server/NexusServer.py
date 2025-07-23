@@ -149,6 +149,8 @@ class NexusServer:
                 # Call stop on all task objects
                 await self._stop_tasks()
 
+                # Close the server
+                await self.stop()
     
     async def _handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         """Handle a new client connection"""
