@@ -4,15 +4,34 @@ import json
 import logfire
 from pydantic import ValidationError
 from pydantic.type_adapter import TypeAdapter
-from typing import Dict, Any, Optional, Callable, List, Set, Awaitable
+from typing import Any, Protocol
 import uuid
 
 from .types import (
-    CallRequest, CallResponse, CallResponseSuccess, CallResponseError,
-    BroadcastMessage, ClientInboundMessage
+    CallRequest,
+    CallResponse,
+    CallResponseSuccess,
+    CallResponseError,
+    BroadcastMessage,
+    ClientInboundMessage,
+    CommandInfo,
+    CommandListResponse,
 )
 
 message_adapter = TypeAdapter(ClientInboundMessage)
+
+class NexusServerServices(Protocol):
+    """
+    Protocol for NexusServer services
+    """
+    async def ping(self) -> str:
+        ...
+    
+    async def queue_broadcast(self) -> None:
+        ...
+    
+    async def prompt_agent(self, prompt: str) -> str:
+        ...
 
 class NexusConnection:
     """
@@ -22,12 +41,12 @@ class NexusConnection:
     def __init__(self, host: str, port: int):
         self.host = host
         self.port = port
-        self.reader: Optional[asyncio.StreamReader] = None
-        self.writer: Optional[asyncio.StreamWriter] = None
+        self.reader: asyncio.StreamReader | None = None
+        self.writer: asyncio.StreamWriter | None = None
 
         self.connection_id: uuid.UUID | None = None
         self.call_id: int = 0
-        self.pending_calls: Dict[str, asyncio.Future] = {}
+        self.pending_calls: dict[str, asyncio.Future] = {}
         self.lock = asyncio.Lock()
 
         self.running = False
@@ -135,7 +154,10 @@ class NexusConnection:
             logfire.warning(warning_msg)
     
     async def _process_response(self, response: CallResponse):
-        """Process a response from the server"""
+        """
+        Process a response from the server, matching the request ID to the pending call
+        and setting the pending call result to the waiting future.
+        """
         # Look for a pending request with matching ID
         if response.request_id in self.pending_calls:
             future = self.pending_calls.get(response.request_id)
@@ -147,7 +169,7 @@ class NexusConnection:
     async def send_command(
         self,
         command: str,
-        payload: Dict[str, Any] | None = None,
+        payload: dict[str, Any] | None = None,
         timeout: float = 10.0
     ) -> Any:
         """
@@ -190,7 +212,14 @@ class NexusConnection:
 
         try:
             result = await asyncio.wait_for(future, timeout)
-            return result
+            if isinstance(result, CallResponseError):
+                logfire.error(f"Command {command} failed: {result.error}")
+                raise Exception(result.error)
+            elif isinstance(result, CallResponseSuccess):
+                return result.result
+            else:
+                logfire.error(f"Received invalid response from server: {result} [{type(result)}]")
+                raise Exception("Invalid response from server")
         except asyncio.TimeoutError:
             logfire.error(f"Command {command} timed out after {timeout} seconds")
             future.cancel()
@@ -198,12 +227,16 @@ class NexusConnection:
         finally:
             self.pending_calls.pop(request_id, None)
 
-    async def ping(self):
-        """Send a ping command to the server"""
-        logfire.info("Sending ping to server...")
-        return await self.send_command("ping")
+    async def list_commands(self) -> list[CommandInfo]:
+        """
+        Retrieve a list of available commands from the server
+        """
+        response = await self.send_command("list_commands")
 
-    async def queue_broadcast(self):
-        """Send a queue broadcast command to the server"""
-        logfire.info("Sending queue broadcast to server...")
-        return await self.send_command("queue_broadcast")
+        try:
+            command_list = CommandListResponse.model_validate(response)
+            return command_list.commands
+        except ValidationError as e:
+            logfire.error(f"List Commands - Invalid Response: {response}")
+            return []
+        

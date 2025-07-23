@@ -4,13 +4,21 @@ import inspect
 import json
 import logfire
 import pkgutil
-from typing import Dict, Callable, Any, Awaitable, Union, List, Type
 from pydantic import ValidationError
 from pydantic.type_adapter import TypeAdapter
 
 from .types import (
-    CallRequest, CallResponse, CallResponseSuccess, CallResponseError, 
-    BroadcastMessage, ServerInboundMessage
+    BroadcastMessage,
+    CallRequest,
+    CallResponse,
+    CallResponseError,
+    CallResponseSuccess,
+    CommandDefinition,
+    CommandHandlerT,
+    CommandInfo,
+    CommandListResponse,
+    CommandParameterInfo,
+    ServerInboundMessage,
 )
 from .tasks.base import NexusTask
 from .registry import ServiceRegistry
@@ -19,7 +27,6 @@ from nexusvoice.core.config import NexusConfig
 
 inbound_message_adapter = TypeAdapter(ServerInboundMessage)
 
-CommandHandlerT = Callable[[str, dict], Union[Any, Awaitable[Any]]]
 
 class NexusServer:
     def __init__(self, config: NexusConfig):
@@ -29,19 +36,30 @@ class NexusServer:
 
         self.server = None
         self.server_socket = None
-        self.clients: Dict[str, asyncio.StreamWriter] = {}
+        self.clients: dict[str, asyncio.StreamWriter] = {}
         self.running = False
 
-        self.tasks: List[NexusTask] = []
+        self.tasks: list[NexusTask] = []
         self.service_registry = ServiceRegistry()
 
         self.lock = asyncio.Lock()
         
         # Command handlers
-        self.command_handlers: Dict[str, CommandHandlerT] = {
-            "ping": self._handle_ping,
-            "queue_broadcast": self._handle_queue_broadcast
-        }
+        self.command_registry: dict[str, CommandDefinition] = {}
+
+        self.register_command(
+            "list_commands",
+            self._handle_list_commands,
+            params=None,
+            description="List available commands"
+        )
+        self.register_command("ping", self._handle_ping, params=None, description="Ping the server")
+        self.register_command(
+            "queue_broadcast",
+            self._handle_queue_broadcast,
+            params=None,
+            description="Queue a broadcast message"
+        )
 
     async def start(self):
         """Initialize the server socket and start listening for connections"""
@@ -80,11 +98,17 @@ class NexusServer:
         
         logfire.info("Server stopped")
 
-    def register_command(self, command: str, handler: CommandHandlerT):
+    def register_command(
+        self, command: str, handler: CommandHandlerT,
+        params: dict[str, type] | None = None,
+        description: str = ""
+    ):
         """Register a command handler"""
-        if command in self.command_handlers:
+        if command in self.command_registry:
             raise ValueError(f"Command {command} is already registered")
-        self.command_handlers[command] = handler
+        self.command_registry[command] = CommandDefinition(
+            command, handler, params, description
+        )
         
     @logfire.instrument("Discovering tasks")
     async def _discover_tasks(self):
@@ -142,7 +166,7 @@ class NexusServer:
         for task in self.tasks:
             try:
                 await task.stop()
-                logfire.info(f"Stopped task: {task.__class__.__name__}")
+                logfire.info("Stopped task: " + task.__class__.__name__)
             except Exception as e:
                 logfire.error(f"Error stopping task {task.__class__.__name__}: {e}")
 
@@ -229,10 +253,10 @@ class NexusServer:
                 return
 
             if isinstance(msg, CallRequest):
-                handler = self.command_handlers.get(msg.command)
-                if handler:
+                command_definition = self.command_registry.get(msg.command)
+                if command_definition:
                     try:
-                        result = await handler(client_id, msg.payload)
+                        result = await command_definition.handler(client_id, msg.payload)
                         response = CallResponseSuccess(
                             request_id=msg.request_id,
                             result=result
@@ -263,7 +287,25 @@ class NexusServer:
         except Exception as e:
             logfire.error(f"Error sending response: {e}")
 
-    
+    async def _handle_list_commands(self, client_id: str, payload: dict) -> CommandListResponse:
+        """
+        Present a list of available commands to the client
+        """
+        commands = []
+        for command in self.command_registry.values():
+            params = {}
+            for param_name, param_type in command.params.items():
+                params[param_name] = CommandParameterInfo(
+                    type=param_type.__name__,
+                    description=f"{param_name}: {param_type.__name__}"
+                )
+            commands.append(CommandInfo(
+                name=command.name,
+                description=command.description,
+                parameters=params
+            ))
+        return CommandListResponse(commands=commands)
+        
     async def _handle_ping(self, client_id: str, payload: dict) -> str:
         """Handle ping command from client"""
         logfire.info(f"Ping from {client_id}")

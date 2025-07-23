@@ -52,7 +52,7 @@ class ServiceRegistry:
                 pass
             
             del self.services[service_id]
-            logfire.info(f"Service unregistered: {service_id}")
+            logfire.info("Service unregistered: " + service_id)
     
     async def get_service(self, service_id: str, expected_type: Type[T], 
                          subscriber_name: str | None = None) -> T | None:

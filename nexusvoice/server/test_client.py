@@ -2,8 +2,7 @@
 import argparse
 import asyncio
 import os
-import signal
-import readline
+import shlex
 import logfire
 import logging
 from pathlib import Path
@@ -13,7 +12,7 @@ from prompt_toolkit.history import FileHistory
 from nexusvoice.bootstrap import get_logfire
 
 from .connection import NexusConnection
-from .types import CallResponseSuccess, CallResponseError
+from .types import CallResponseSuccess, CallResponseError, CommandInfo
 
 logger = logging.getLogger(__name__)
 
@@ -30,10 +29,16 @@ class REPLClient:
         self.history = FileHistory(history_path)
         self.prompt = PromptSession[str](history=self.history)
 
-        self.command_map = {
-            "ping": self.connection.ping,
-            "queue_broadcast": self.connection.queue_broadcast,
-        }
+        self.command_map = {}
+
+    async def initialize_commands(self):
+        """
+        Initialize the command map with commands from the server
+        """
+        commands = await self.connection.list_commands()
+        for command in commands:
+            print(f"{command.name}: {command.description}")
+            self.command_map[command.name] = command
     
     async def start(self):
         """Start the REPL interface"""
@@ -46,6 +51,8 @@ class REPLClient:
         # Auto-connect on first run
         print("Automatically connecting to server...")
         await self.connection.connect()
+        
+        await self.initialize_commands()
         
         while self.running:
             # Check if we're connected (for reconnection after a disconnect)
@@ -78,7 +85,7 @@ class REPLClient:
             if not cmd:
                 continue
                 
-            # Process command
+            # Process basic commands
             cmd_parts = cmd.split()
             cmd_name = cmd_parts[0].lower()
             
@@ -98,19 +105,9 @@ class REPLClient:
             elif cmd_name == 'status':
                 print(f"Connected: {self.connection.connected}")
                 print(f"Server address: {self.connection.host}:{self.connection.port}")
-                
-            elif cmd_name in self.command_map:
-                if not self.connection.connected:
-                    print("Error: Not connected to server.")
-                    show_connect_prompt = True
-                    continue
-                response = await self.command_map[cmd_name]()
-                if isinstance(response, CallResponseSuccess):
-                    print(f"{response.result}")
-                elif isinstance(response, CallResponseError):
-                    print(f"{cmd_name} failed: {response.error}")
-                else:
-                    print(f"{cmd_name} failed: {response}")
+            
+            elif await self._process_server_command(cmd):
+                continue
 
             else:
                 print(f"Unknown command: {cmd_name}")
@@ -127,14 +124,56 @@ class REPLClient:
         if self.connection.connected:
             await self.connection.disconnect()
     
+    async def _process_server_command(self, input: str):
+        """
+        Process the input string as a potential server command.
+        
+        Args:
+            input (str): The input string to process
+        
+        Returns:
+            bool: True if the command was processed, False otherwise
+        """
+        parts = shlex.split(input)
+        cmd_name = parts[0].lower()
+
+        if cmd_name in self.command_map:
+            command_info = self.command_map[cmd_name]
+            # Index parameters by position
+            expected_params = {i: param for i, param in enumerate(command_info.parameters)}
+
+            # Parse arguments
+            args = {}
+            for i in range(1, len(parts)):
+                if i in expected_params:
+                    param_info = expected_params[i]
+                    # TODO: Validate arguments
+                    args[param_info.name] = parts[i]
+                else:
+                    print(f"Invalid argument: {parts[i]}")
+                    return True
+
+            await self._execute_command(command_info, args)
+            return True
+        
+        return False
+
+    async def _execute_command(self, command_info: CommandInfo, args: dict):
+        """
+        Execute a command with the given arguments
+        """
+        try:
+            response = await self.connection.send_command(command_info.name, args)
+            print(response)
+        except Exception as e:
+            print(f"Error executing command {command_info.name}: {e}")
+ 
     def print_help(self):
         """Print help information"""
         print("\nAvailable Commands:")
         print("  help           - Show this help message")
         print("  connect        - Connect to the server")
         print("  disconnect     - Disconnect from the server")
-        print("  ping           - Send a ping to the server")
-        print("  queue_broadcast - Queue a broadcast message on the server")
         print("  status         - Show connection status")
         print("  exit, quit     - Exit the client")
         print()

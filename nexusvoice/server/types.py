@@ -1,5 +1,20 @@
-from typing import Literal, Union, Annotated, Any
+from typing import  Annotated, Any, Awaitable, Callable, Literal, Union
 from pydantic import BaseModel, Field, model_validator
+
+
+CommandHandlerT = Callable[[str, dict], Union[Any, Awaitable[Any]]]
+
+class CommandDefinition:
+    def __init__(
+        self, name: str,
+        handler: CommandHandlerT,
+        params: dict[str, type] | None = None,
+        description: str = ""
+    ):
+        self.name = name
+        self.handler = handler
+        self.params = params or {}
+        self.description = description
 
 class CallRequest(BaseModel):
     msg_type: Literal["call_request"] = "call_request"
@@ -31,13 +46,34 @@ class BroadcastMessage(BaseModel):
     msg_type: Literal["broadcast"] = "broadcast"
     message: str
 
+class CommandParameterInfo(BaseModel):
+    type: str
+    description: str
+
+class CommandInfo(BaseModel):
+    name: str
+    description: str
+    parameters: dict[str, CommandParameterInfo] = Field(default_factory=dict)
+
+class CommandListRequest(BaseModel):
+    msg_type: Literal["command_list_request"] = "command_list_request"
+
+class CommandListResponse(BaseModel):
+    msg_type: Literal["command_list_response"] = "command_list_response"
+    commands: list[CommandInfo]
+
 ServerInboundMessage = Annotated[
     Union[CallRequest],
     Field(discriminator="msg_type")
 ]
 
 ClientInboundMessage = Annotated[
-    Union[CallResponseSuccess, CallResponseError, BroadcastMessage],
+    Union[
+        CallResponseSuccess,
+        CallResponseError,
+        BroadcastMessage,
+        CommandListResponse
+    ],
     Field(discriminator="msg_type")
 ]
 
