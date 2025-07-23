@@ -7,7 +7,14 @@ import logfire
 import logging
 from pathlib import Path
 from prompt_toolkit import PromptSession
+from prompt_toolkit import auto_suggest
 from prompt_toolkit.history import FileHistory
+from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
+from prompt_toolkit.completion import Completion
+from prompt_toolkit.document import Document
+from prompt_toolkit.completion import Completer
+from prompt_toolkit.completion import CompleteEvent
+from typing import Iterable
 
 from nexusvoice.bootstrap import get_logfire
 
@@ -15,6 +22,23 @@ from .connection import NexusConnection
 from .types import CallResponseSuccess, CallResponseError, CommandInfo
 
 logger = logging.getLogger(__name__)
+
+class CommandCompleter(Completer):
+    def __init__(self, repl_commands: list[str], command_map: dict[str, CommandInfo]):
+        self.repl_commands = repl_commands
+        self.command_map = command_map
+    
+    def get_completions(self, document: Document, complete_event: CompleteEvent) -> Iterable[Completion]:
+        text = document.text
+        for command in self.repl_commands:
+            if command.startswith(text):
+                completion = command[len(text):]
+                yield Completion(completion, display=command)
+        
+        for command in self.command_map:
+            if command.startswith(text):
+                completion = command[len(text):]
+                yield Completion(completion, display=command)
 
 class REPLClient:
     """A REPL interface for the NexusServer connection."""
@@ -73,7 +97,7 @@ class REPLClient:
             
             # Get command input
             try:
-                cmd = await self.prompt.prompt_async("nexus> ")
+                cmd = await self._command_prompt()
                 cmd = cmd.strip()
             except KeyboardInterrupt:
                 continue
@@ -123,6 +147,14 @@ class REPLClient:
 
         if self.connection.connected:
             await self.connection.disconnect()
+    
+    async def _command_prompt(self):
+        repl_commands = ["connect", "disconnect", "status", "help", "exit", "quit"]
+        return await self.prompt.prompt_async(
+            "nexus> ",
+            completer=CommandCompleter(repl_commands, self.command_map),
+            auto_suggest=AutoSuggestFromHistory()
+        )
     
     async def _process_server_command(self, input: str):
         """
