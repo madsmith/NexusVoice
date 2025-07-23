@@ -2,6 +2,7 @@ import asyncio
 import logfire
 import logging
 from lutron_homeworks.client import LutronHomeworksClient
+from lutron_homeworks.commands import LutronCommand
 from lutron_homeworks.database import LutronDatabase, LutronXMLDataLoader
 from lutron_homeworks.database.filters import FilterLibrary
 from typing import Any
@@ -11,9 +12,34 @@ from nexusvoice.server.types import BroadcastMessage
 from nexusvoice.server.tasks.base import NexusTask
 from nexusvoice.core.config import NexusConfig
 
+from nexusvoice.server.servivces.lutron_homeworks import LutronHomeworksService
+
 logger = logging.getLogger(__name__)
 
+class LutronHomeworksImpl:
+    def __init__(self, client: LutronHomeworksClient, database: LutronDatabase):
+        self._client = client
+        self._database = database
+    
+    def client(self) -> LutronHomeworksClient:
+        return self._client
+    
+    def database(self) -> LutronDatabase:
+        return self._database
+    
+    async def execute_command(self, command: LutronCommand) -> Any:
+        try:
+            return await self._client.execute_command(command)
+        except Exception as e:
+            logger.error(f"Error executing Lutron command: {e}")
+            raise
+
 class LutronHomeworks(NexusTask):
+
+    provided_services = {
+        "lutron-homeworks": LutronHomeworksService
+    }
+
     def __init__(self, server: "NexusServer", config: NexusConfig):
         super().__init__(server, config)
 
@@ -50,6 +76,16 @@ class LutronHomeworks(NexusTask):
                 self.lutron_database.enable_filter(filter_name, filter_args)
         # =================================================
 
+    async def _create_provided_services(self):
+        self.lutron_homeworks_service = LutronHomeworksImpl(
+            self.lutron_client,
+            self.lutron_database
+        )
+
+        return {
+            "lutron-homeworks": self.lutron_homeworks_service
+        }
+    
     async def start(self):
         """Run the task"""
         try:

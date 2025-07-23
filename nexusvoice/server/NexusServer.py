@@ -13,12 +13,13 @@ from .types import (
     BroadcastMessage, ServerInboundMessage
 )
 from .tasks.base import NexusTask
+from .registry import ServiceRegistry
 
 from nexusvoice.core.config import NexusConfig
 
 inbound_message_adapter = TypeAdapter(ServerInboundMessage)
 
-CommandHandlerT = Callable[[Any], Union[Any, Awaitable[Any]]]
+CommandHandlerT = Callable[[str, dict], Union[Any, Awaitable[Any]]]
 
 class NexusServer:
     def __init__(self, config: NexusConfig):
@@ -32,6 +33,7 @@ class NexusServer:
         self.running = False
 
         self.tasks: List[NexusTask] = []
+        self.service_registry = ServiceRegistry()
 
         self.lock = asyncio.Lock()
         
@@ -108,13 +110,32 @@ class NexusServer:
                     logfire.error(f"Error loading task module {name}: {e}")
         
         # Register all tasks
+        failed_tasks = []
         for task in self.tasks:
             try:
                 task.register()
                 logfire.info(f"Registered task: {task.__class__.__name__}")
             except Exception as e:
                 logfire.error(f"Error registering task {task.__class__.__name__}: {e}")
-                self.tasks.remove(task)
+                failed_tasks.append(task)
+
+        # Remove failed tasks
+        self.tasks = [task for task in self.tasks if task not in failed_tasks]
+
+        # Initialize tasks
+        initialized_tasks = []
+        for task in self.tasks:
+            try:
+                success = await task.initialize()
+                if success:
+                    initialized_tasks.append(task)
+                else:
+                    logfire.error(f"Task {task.__class__.__name__} failed to initialize")
+            except Exception as e:
+                logfire.error(f"Error initializing task {task.__class__.__name__}: {e}")
+        
+        # Replace tasks list with only successfully initialized tasks
+        self.tasks = initialized_tasks
                 
     async def _stop_tasks(self):
         """Stop all running tasks"""
