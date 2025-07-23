@@ -75,7 +75,7 @@ class NexusConnection:
         self.call_id = 0
         return False
     
-    async def disconnect(self):
+    async def disconnect(self) -> None:
         """Disconnect from the server"""
         if self.read_task:
             self.read_task.cancel()
