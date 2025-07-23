@@ -21,7 +21,7 @@ class LutronTest(NexusTask):
 
         last_value = 0
         while self.running:
-            await asyncio.sleep(8)
+            await asyncio.sleep(300)
 
             try:
                 # Pick a new value that is different from the last one

@@ -18,9 +18,9 @@ class SampleTask(NexusTask):
         self.running = True
         count = 1
         while self.running:
-            await asyncio.sleep(5)
             await self.server.broadcast(BroadcastMessage(message=f"Hello from SampleTask {count}"))
             count += 1
+            await asyncio.sleep(30)
 
     async def _handle_sample(self, client_id: str, payload: dict) -> str:
         """Handle sample command from client"""

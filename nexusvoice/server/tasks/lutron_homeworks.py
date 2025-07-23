@@ -99,19 +99,12 @@ class LutronHomeworks(NexusTask):
             
             # TODO: need to be able to await connected.. connect isn't guaranteed to succeed
 
-            # Test
-            import random
-            value = random.randint(0, 100)
-            from lutron_homeworks.commands import OutputCommand
-            cmd = OutputCommand.set_zone_level(179, value)
-            await self.lutron_client.execute_command(cmd)
-
             self.running = True
             count = 1
             while self.running:
-                await asyncio.sleep(5)
                 await self.server.broadcast(BroadcastMessage(message=f"Hello from Lutron Homeworks {count}"))
                 count += 1
+                await asyncio.sleep(60)
         except Exception as e:
             logger.error(f"Lutron Homeworks task failed: {e}")
             print("Exception: ", e, type(e))
