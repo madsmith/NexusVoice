@@ -1,0 +1,85 @@
+import asyncio
+import logfire
+import logging
+from lutron_homeworks.client import LutronHomeworksClient
+from lutron_homeworks.database import LutronDatabase, LutronXMLDataLoader
+from lutron_homeworks.database.filters import FilterLibrary
+from typing import Any
+
+from nexusvoice.server.NexusServer import NexusServer
+from nexusvoice.server.types import BroadcastMessage
+from nexusvoice.server.tasks.base import NexusTask
+from nexusvoice.core.config import NexusConfig
+
+logger = logging.getLogger(__name__)
+
+class LutronHomeworks(NexusTask):
+    def __init__(self, server: "NexusServer", config: NexusConfig):
+        super().__init__(server, config)
+
+        host = config.get("lutron.server.host")
+        username = config.get("lutron.server.username")
+        password = config.get("lutron.server.password")
+
+        self.lutron_client = LutronHomeworksClient(host, username, password)
+        
+        db_address = config.get("lutron.database.address")
+        cache_path = config.get("lutron.database.cache_path", "./config/lutron")
+        loader = LutronXMLDataLoader(db_address, cache_path)
+        if config.get("lutron.database.cache_only"):
+            # loader.set_cache_only(True)
+            pass
+
+        self.lutron_database = LutronDatabase(loader)
+
+        # Apply database modifications
+        # =================================================
+        # 1. Define custom type map
+        type_map = config.get("lutron.database.type_map")
+        if type_map:
+            self.lutron_database.apply_custom_type_map(type_map)
+
+        # 2. Add data filters
+        filters: dict[str, list[list[Any]]] = config.get("lutron.database.filters")
+        for filter_name, instances in filters.items():
+            for filter_args in instances:
+                filter = FilterLibrary.get_filter(filter_name, filter_args)
+                if filter is None:
+                    raise RuntimeError(f"Filter {filter_name} not found")
+                logger.debug(f"Applying filter {filter_name} with args {filter_args}")
+                self.lutron_database.enable_filter(filter_name, filter_args)
+        # =================================================
+
+    async def start(self):
+        """Run the task"""
+        try:
+            # Load the database
+            with logfire.span("Load Lutron Database"):
+                self.lutron_database.load()
+            
+            # Initialize the client
+            with logfire.span("Initialize Lutron Client"):
+                await self.lutron_client.connect()
+            
+            # TODO: need to be able to await connected.. connect isn't guaranteed to succeed
+
+            # Test
+            import random
+            value = random.randint(0, 100)
+            from lutron_homeworks.commands import OutputCommand
+            cmd = OutputCommand.set_zone_level(179, value)
+            await self.lutron_client.execute_command(cmd)
+
+            self.running = True
+            count = 1
+            while self.running:
+                await asyncio.sleep(5)
+                await self.server.broadcast(BroadcastMessage(message=f"Hello from Lutron Homeworks {count}"))
+                count += 1
+        except Exception as e:
+            logger.error(f"Lutron Homeworks task failed: {e}")
+            print("Exception: ", e, type(e))
+            import traceback
+            traceback.print_exc()
+        finally:
+            self.running = False
