@@ -60,7 +60,6 @@ class REPLClient:
         """
         commands = await self.connection.list_commands()
         for command in commands:
-            print(f"{command.name}: {command.description}")
             self.command_map[command.name] = command
     
     async def start(self):
@@ -129,6 +128,9 @@ class REPLClient:
                 print(f"Connected: {self.connection.connected}")
                 print(f"Server address: {self.connection.host}:{self.connection.port}")
             
+            elif cmd_name == 'list':
+                self._list_commands()
+            
             elif await self._process_server_command(cmd):
                 continue
 
@@ -148,7 +150,7 @@ class REPLClient:
             await self.connection.disconnect()
     
     async def _command_prompt(self):
-        repl_commands = ["connect", "disconnect", "status", "help", "exit", "quit"]
+        repl_commands = ["connect", "disconnect", "status", "help", "exit", "quit", "list"]
         return await self.prompt.prompt_async(
             "nexus> ",
             completer=CommandCompleter(repl_commands, self.command_map),
@@ -199,14 +201,42 @@ class REPLClient:
         except Exception as e:
             print(f"Error executing command {command_info.name}: {e}")
  
+    def _list_commands(self):
+        """List all available server commands"""
+        print("\nAvailable Server Commands:")
+        if not self.command_map:
+            print("  No commands available. Server may not be connected.")
+        else:
+            max_name_len = max(len(name) for name in self.command_map.keys())
+            for name, cmd_info in sorted(self.command_map.items()):
+                params = ", ".join(cmd_info.parameters.keys()) if cmd_info.parameters else ""
+                if params:
+                    print(f"  {name:<{max_name_len}} [{params}] - {cmd_info.description}")
+                elif cmd_info.description:
+                    print(f"  {name:<{max_name_len}} - {cmd_info.description}")
+                else:
+                    print(f"  {name:}")
+        print()
+    
     def print_help(self):
         """Print help information"""
-        print("\nAvailable Commands:")
+        print("\nClient Commands:")
         print("  help           - Show this help message")
+        print("  list           - List all available server commands")
         print("  connect        - Connect to the server")
         print("  disconnect     - Disconnect from the server")
         print("  status         - Show connection status")
         print("  exit, quit     - Exit the client")
+        
+        # List server commands
+        if self.command_map:
+            print("\nServer Commands:")
+            for name, cmd_info in sorted(self.command_map.items()):
+                params = ", ".join(cmd_info.parameters.keys()) if cmd_info.parameters else ""
+                if params:
+                    print(f"  {name} [{params}] - {cmd_info.description}")
+                else:
+                    print(f"  {name} - {cmd_info.description}")
         print()
             
 async def run_repl(args: argparse.Namespace):
