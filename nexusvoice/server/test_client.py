@@ -7,7 +7,6 @@ import logfire
 import logging
 from pathlib import Path
 from prompt_toolkit import PromptSession
-from prompt_toolkit import auto_suggest
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 from prompt_toolkit.completion import Completion
