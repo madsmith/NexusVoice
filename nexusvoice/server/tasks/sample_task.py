@@ -4,10 +4,11 @@ import logfire
 from nexusvoice.server.NexusServer import NexusServer
 from nexusvoice.server.types import BroadcastMessage
 from nexusvoice.server.tasks.base import NexusTask
+from nexusvoice.core.config import NexusConfig
 
 class SampleTask(NexusTask):
-    def __init__(self, server: "NexusServer"):
-        super().__init__(server)
+    def __init__(self, server: "NexusServer", config: NexusConfig):
+        super().__init__(server, config)
 
     def register(self):
         self.server.register_command("sample", self._handle_sample)

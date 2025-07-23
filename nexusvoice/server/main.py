@@ -17,11 +17,8 @@ async def run_server(args: argparse.Namespace):
     try:
         with logfire.span("NexusServer"):
             config = load_config()
-            host = config.get("nexus.server.host", "localhost")
-            port = config.get("nexus.server.port", 8000)
             
-            logfire.info(f"Starting NexusServer on {host}:{port}")
-            server = NexusServer(host, port)
+            server = NexusServer(config)
             await server.start()
     except KeyboardInterrupt:
         logger.warning(f"Exiting due to KeyboardInterrupt")

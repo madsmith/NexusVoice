@@ -4,11 +4,14 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from nexusvoice.server.NexusServer import NexusServer
 
+from nexusvoice.core.config import NexusConfig
+
 class NexusTask(ABC):
     """Base class for all Nexus tasks."""
     
-    def __init__(self, server: "NexusServer"):
+    def __init__(self, server: "NexusServer", config: NexusConfig):
         self.server = server
+        self.config = config
         self.running = False
 
     def register(self):

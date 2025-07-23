@@ -14,14 +14,18 @@ from .types import (
 )
 from .tasks.base import NexusTask
 
+from nexusvoice.core.config import NexusConfig
+
 inbound_message_adapter = TypeAdapter(ServerInboundMessage)
 
 CommandHandlerT = Callable[[Any], Union[Any, Awaitable[Any]]]
 
 class NexusServer:
-    def __init__(self, host: str, port: int):
-        self.host = host
-        self.port = port
+    def __init__(self, config: NexusConfig):
+        self.config = config
+        self.host = config.get("nexus.server.host", "localhost")
+        self.port = config.get("nexus.server.port", 8000)
+
         self.server = None
         self.server_socket = None
         self.clients: Dict[str, asyncio.StreamWriter] = {}
@@ -42,11 +46,11 @@ class NexusServer:
         # Discover and initialize tasks
         await self._discover_tasks()
         
+        logfire.info(f"Starting NexusServer on {self.host}:{self.port}")
         self.server = await asyncio.start_server(
             self._handle_client, self.host, self.port
         )
 
-        logfire.info(f"Server started on {self.host}:{self.port}")
         self.running = True
         
         async with self.server:
@@ -80,6 +84,7 @@ class NexusServer:
             raise ValueError(f"Command {command} is already registered")
         self.command_handlers[command] = handler
         
+    @logfire.instrument("Discovering tasks")
     async def _discover_tasks(self):
         """Discover, instantiate, and register NexusTask classes"""
         import nexusvoice.server.tasks as tasks_module
@@ -96,7 +101,7 @@ class NexusServer:
                         attr = getattr(module, attr_name)
                         if (inspect.isclass(attr) and issubclass(attr, NexusTask) and attr != NexusTask):
                             # Instantiate the task
-                            task = attr(self)
+                            task = attr(self, self.config)
                             logfire.info(f"Discovered task: {attr.__name__}")
                             self.tasks.append(task)
                 except Exception as e:
@@ -120,38 +125,39 @@ class NexusServer:
             except Exception as e:
                 logfire.error(f"Error stopping task {task.__class__.__name__}: {e}")
 
+    @logfire.instrument("Server Main Loop")
     async def _main_loop(self):
         """Main server loop"""
-        with logfire.span("NexusServer Running"):
-            # Start task coroutines but don't await them yet
-            task_coros = [task.start() for task in self.tasks]
-            tasks = []
+        # Start task coroutines but don't await them yet
+        task_coros = [task.start() for task in self.tasks]
+        tasks = []
+        
+        try:
+            # Start all tasks
+            for coro in task_coros:
+                tasks.append(asyncio.create_task(coro))
+                
+            # Keep the server running until it is cancelled
+            await asyncio.Future()
+        except asyncio.CancelledError:
+            logfire.info("Server loop cancelled")
+        finally:
+            # Stop all tasks
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
             
-            try:
-                # Start all tasks
-                for coro in task_coros:
-                    tasks.append(asyncio.create_task(coro))
-                    
-                # Keep the server running until it is cancelled
-                await asyncio.Future()
-            except asyncio.CancelledError:
-                logfire.info("Server loop cancelled")
-            finally:
-                # Stop all tasks
-                for task in tasks:
-                    if not task.done():
-                        task.cancel()
-                
-                # Wait for all tasks to be cancelled
-                if tasks:
-                    await asyncio.gather(*tasks, return_exceptions=True)
-                
-                # Call stop on all task objects
-                await self._stop_tasks()
+            # Wait for all tasks to be cancelled
+            if tasks:
+                await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # Call stop on all task objects
+            await self._stop_tasks()
 
-                # Close the server
-                await self.stop()
+            # Close the server
+            await self.stop()
     
+    @logfire.instrument("Handle Client Connection")
     async def _handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         """Handle a new client connection"""
         # Generate a unique client ID   
@@ -186,6 +192,7 @@ class NexusServer:
                     del self.clients[client_id]
             logfire.info(f"Client disconnected: {client_id}")
     
+    @logfire.instrument("Process Command")
     async def _process_command(self, client_id: str, data: bytes, writer: asyncio.StreamWriter):
         try:
             try:
@@ -226,6 +233,7 @@ class NexusServer:
         except Exception as e:
             logfire.error(f"Unexpected error in _process_command: {e}")
     
+    @logfire.instrument("Send Response")
     async def _send_response(self, writer: asyncio.StreamWriter, response: CallResponse | BroadcastMessage):
         try:
             response_data = response.model_dump_json().encode() + b'\n'
