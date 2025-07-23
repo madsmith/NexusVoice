@@ -216,3 +216,10 @@ logging:
     "httpx",
     "urllib3.connectionpool"
   ]
+lutron:
+  server:
+    host: ${private.lutron.host}
+    username: ${private.lutron.username}
+    password: ${private.lutron.password}
+  database:
+    address: ${private.lutron.host}
