@@ -18,7 +18,7 @@ from typing import Iterable
 from nexusvoice.bootstrap import get_logfire
 
 from .connection import NexusConnection
-from .types import CallResponseSuccess, CallResponseError, CommandInfo
+from .types import CommandInfo
 
 logger = logging.getLogger(__name__)
 
