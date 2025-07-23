@@ -1,0 +1,4 @@
+matplotlib>=3.10
+pytest-asyncio>=1.0
+pytest>=8.3.0
+scikit-learn>=1.4.0
