@@ -53,35 +53,43 @@ class MockAPI:
         return self.context_provider()
 
 @pytest.fixture
-def dummy_api():
+def dummy_api() -> MockAPI:
     return MockAPI(lambda: DummyContext())
 
 @pytest.fixture
-def same_task_api():
+def same_task_api() -> MockAPI:
     return MockAPI(lambda: SameTaskContext())
 
-async def is_not_open(manager: RuntimeContextManager):
-    context = manager.get_context("test")
-    assert context is None, "Context should be removed"
-    assert not manager._contexts["test"].is_open, "Context should be closed"
-    assert manager._contexts["test"]._opened_at == -1, "Time should be unset when context is not open"
+async def is_not_open(manager: RuntimeContextManager, context_ids: list[str]):
+    for context_id in context_ids:
+        context = manager.get_context(context_id)
+        assert context is None, f"Context {context_id} should be removed"
+        assert not manager._contexts[context_id].is_open, f"Context {context_id} should be closed"
+        assert manager._contexts[context_id]._opened_at == -1, f"Time should be unset when context {context_id} is not open"
 
-async def is_open(manager: RuntimeContextManager):
-    context = manager.get_context("test")
-    assert context is not None
-    assert isinstance(context, DummyContext)
-    assert manager._contexts["test"].is_open, "Context should be open"
-    assert manager._contexts["test"]._opened_at != -1, "Time should be set when context is opened"
+async def is_open(manager: RuntimeContextManager, context_ids: list[str]):
+    for context_id in context_ids:
+        context = manager.get_context(context_id)
+        assert context is not None
+        assert isinstance(context, DummyContext)
+        assert manager._contexts[context_id].is_open, f"Context {context_id} should be open"
+        assert manager._contexts[context_id]._opened_at != -1, f"Time should be set when context {context_id} is opened"
 
-async def can_open_context(manager: RuntimeContextManager):
-    await manager.open()
+async def can_open_context(manager: RuntimeContextManager, context_ids: list[str] | None = None):
+    await manager.open(context_ids)
     
-    await is_open(manager)
+    if context_ids is None:
+        context_ids = ["test"]
+    
+    await is_open(manager, context_ids)
 
-async def can_close_context(manager: RuntimeContextManager):
-    await manager.close()
-
-    await is_not_open(manager)
+async def can_close_context(manager: RuntimeContextManager, context_ids: list[str] | None = None):
+    await manager.close(context_ids)
+    
+    if context_ids is None:
+        context_ids = ["test"]
+    
+    await is_not_open(manager, context_ids)
 
 async def can_shutdown(manager: RuntimeContextManager):
     await manager.stop()
@@ -92,34 +100,40 @@ async def can_shutdown(manager: RuntimeContextManager):
     except asyncio.CancelledError:
         pass
 
+async def can_get_context_id(manager: RuntimeContextManager, context_id: str):
+    context = manager.get_context(context_id)
+    assert context is not None, f"Context {context_id} should exist"
+    assert isinstance(context, DummyContext), f"Context {context_id} should be a DummyContext"
+    return context.id
+
 @pytest.mark.asyncio
-async def test_runtime_context_manager_shutdown(dummy_api):
+async def test_runtime_context_manager_shutdown(dummy_api: MockAPI):
     api = dummy_api
     manager = RuntimeContextManager()
     manager.add_context("test", dummy_api.run_context, CONTEXT_TIMEOUT)
     manager.start()
 
-    await is_not_open(manager)
+    await is_not_open(manager, ["test"])
 
     await can_shutdown(manager)
 
 @pytest.mark.asyncio
-async def test_runtime_context_manager_shutdown_sloppy(dummy_api):
+async def test_runtime_context_manager_shutdown_sloppy(dummy_api: MockAPI):
     api = dummy_api
     manager = RuntimeContextManager()
     manager.add_context("test", dummy_api.run_context, CONTEXT_TIMEOUT)
     manager.start()
 
-    await is_not_open(manager)
+    await is_not_open(manager, ["test"])
 
 @pytest.mark.asyncio
-async def test_runtime_context_manager_open_close(dummy_api):
+async def test_runtime_context_manager_open_close(dummy_api: MockAPI):
     api = dummy_api
     manager = RuntimeContextManager()
     manager.add_context("test", dummy_api.run_context, CONTEXT_TIMEOUT)
     manager.start()
 
-    await is_not_open(manager)
+    await is_not_open(manager, ["test"])
 
     await can_open_context(manager)
 
@@ -128,14 +142,14 @@ async def test_runtime_context_manager_open_close(dummy_api):
     await can_shutdown(manager)
 
 @pytest.mark.asyncio
-async def test_runtime_context_manager_open_close_same_task(same_task_api):
+async def test_runtime_context_manager_open_close_same_task(same_task_api: MockAPI):
     api = same_task_api
 
     manager = RuntimeContextManager()
     manager.add_context("test", same_task_api.run_context, CONTEXT_TIMEOUT)
     manager.start()
 
-    await is_not_open(manager)
+    await is_not_open(manager, ["test"])
 
     await can_open_context(manager)
 
@@ -144,13 +158,13 @@ async def test_runtime_context_manager_open_close_same_task(same_task_api):
     await can_shutdown(manager)
 
 @pytest.mark.asyncio
-async def test_context_manager_open_open_close(dummy_api):
+async def test_context_manager_open_open_close(dummy_api: MockAPI):
     api = dummy_api
     manager = RuntimeContextManager()
     manager.add_context("test", dummy_api.run_context, CONTEXT_TIMEOUT)
     manager.start()
 
-    await is_not_open(manager)
+    await is_not_open(manager, ["test"])
 
     await can_open_context(manager)
 
@@ -161,7 +175,7 @@ async def test_context_manager_open_open_close(dummy_api):
     await can_shutdown(manager)
 
 @pytest.mark.asyncio
-async def test_context_manager_close_from_another_task(same_task_api):
+async def test_context_manager_close_from_another_task(same_task_api: MockAPI):
     api = same_task_api
 
     manager = RuntimeContextManager()
@@ -176,20 +190,20 @@ async def test_context_manager_close_from_another_task(same_task_api):
     close_task = asyncio.create_task(close_in_new_task())
     await close_task  # Should NOT raise
     
-    await is_not_open(manager)
+    await is_not_open(manager, ["test"])
     
     # Clean up
     await can_shutdown(manager)
 
 @pytest.mark.asyncio
-async def test_context_manager_reopen_after_close(dummy_api):
+async def test_context_manager_reopen_after_close(dummy_api: MockAPI):
     api = dummy_api
 
     manager = RuntimeContextManager()
     manager.add_context("test", dummy_api.run_context, CONTEXT_TIMEOUT)
     manager.start()
 
-    await is_not_open(manager)
+    await is_not_open(manager, ["test"])
 
     await can_open_context(manager)
     
@@ -206,21 +220,18 @@ async def test_context_manager_reopen_after_close(dummy_api):
     await can_shutdown(manager)
 
 @pytest.mark.asyncio
-async def test_context_manager_context_expires(dummy_api):
+async def test_context_manager_context_expires(dummy_api: MockAPI):
     api = dummy_api
 
     manager = RuntimeContextManager()
     manager.add_context("test", dummy_api.run_context, CONTEXT_TIMEOUT)
     manager.start()
 
-    await is_not_open(manager)
+    await is_not_open(manager, ["test"])
 
     await can_open_context(manager)
 
-    ctx = manager.get_context("test")
-    assert ctx is not None
-    assert isinstance(ctx, DummyContext)
-    ctx_id = ctx.id
+    ctx_id = await can_get_context_id(manager, "test")
 
     await asyncio.sleep(CONTEXT_TIMEOUT - 1)
 
@@ -234,33 +245,28 @@ async def test_context_manager_context_expires(dummy_api):
 
     await can_open_context(manager)
 
-    new_ctx = manager.get_context("test")
-    assert new_ctx is not None, "Context should be reacquired after expiration"
-    assert isinstance(new_ctx, DummyContext)
-    assert new_ctx.id != ctx_id, "Context id should change after expiration"
+    new_ctx_id = await can_get_context_id(manager, "test")
+    assert new_ctx_id != ctx_id, "Context id should change after expiration"
 
     # await can_close_context(manager)
     await manager.close()
     
-    await is_not_open(manager)
+    await is_not_open(manager, ["test"])
 
     await can_shutdown(manager)
 
 @pytest.mark.asyncio
-async def test_context_manager_reopen_context_refreshes_timeout(dummy_api):
+async def test_context_manager_reopen_context_refreshes_timeout(dummy_api: MockAPI):
     api = dummy_api
     manager = RuntimeContextManager()
     manager.add_context("test", dummy_api.run_context, CONTEXT_TIMEOUT)
     manager.start()
 
-    await is_not_open(manager)
+    await is_not_open(manager, ["test"])
 
     await can_open_context(manager)
 
-    ctx = manager.get_context("test")
-    assert ctx is not None
-    assert isinstance(ctx, DummyContext)
-    ctx_id = ctx.id
+    ctx_id = await can_get_context_id(manager, "test")
     ctx_opened_at = manager._contexts["test"]._opened_at
 
     await asyncio.sleep(CONTEXT_TIMEOUT - 1)
@@ -287,26 +293,23 @@ async def test_context_manager_reopen_context_refreshes_timeout(dummy_api):
     # await can_close_context(manager)
     await manager.close()
     
-    await is_not_open(manager)
+    await is_not_open(manager, ["test"])
 
     await can_shutdown(manager)
 
 @pytest.mark.asyncio
-async def test_context_manager_context_id_stable_over_time(dummy_api):
+async def test_context_manager_context_id_stable_over_time(dummy_api: MockAPI):
     api = dummy_api
 
     manager = RuntimeContextManager()
     manager.add_context("test", dummy_api.run_context, CONTEXT_TIMEOUT)
     manager.start()
 
-    await is_not_open(manager)
+    await is_not_open(manager, ["test"])
 
     await can_open_context(manager)
 
-    ctx = manager.get_context("test")
-    assert ctx is not None
-    assert isinstance(ctx, DummyContext)
-    ctx_id = ctx.id
+    ctx_id = await can_get_context_id(manager, "test")
 
     await asyncio.sleep(CONTEXT_TIMEOUT - 1)
 
@@ -324,11 +327,132 @@ async def test_context_manager_context_id_stable_over_time(dummy_api):
 
     await can_open_context(manager)
 
-    new_ctx = manager.get_context("test")
-    assert new_ctx is not None, "Context should be reacquired after expiration"
-    assert isinstance(new_ctx, DummyContext)
-    assert new_ctx.id != ctx_id, "Context id should change after expiration"
+    new_ctx_id = await can_get_context_id(manager, "test")
+    assert new_ctx_id != ctx_id, "Context id should change after expiration"
 
     await can_close_context(manager)
+
+    await can_shutdown(manager)
+
+
+@pytest.mark.asyncio
+async def test_context_manager_open_by_specific_id(dummy_api: MockAPI):
+    """Test that we can open a context by specific ID"""
+    api = dummy_api
+
+    manager = RuntimeContextManager()
+    manager.add_context("test1", dummy_api.run_context, CONTEXT_TIMEOUT)
+    manager.add_context("test2", dummy_api.run_context, CONTEXT_TIMEOUT)
+    manager.start()
+
+    # Both contexts should be initially closed
+    await is_not_open(manager, ["test1", "test2"])
+
+    # Open just the first context
+    await can_open_context(manager, ["test1"])
+    
+    # First context should be open now
+    await is_open(manager, ["test1"])
+    
+    # Second context should still be closed
+    await is_not_open(manager, ["test2"])
+    
+    # Second context should still be closed
+    await is_not_open(manager, ["test2"])
+    
+    # Close all contexts
+    await can_close_context(manager, ["test1", "test2"])
+    
+    # Both contexts should be closed now
+    await is_not_open(manager, ["test1", "test2"])
+
+    await can_shutdown(manager)
+
+
+@pytest.mark.asyncio
+async def test_context_manager_multiple_contexts_with_different_ids(dummy_api: MockAPI):
+    """Test managing multiple contexts with different IDs"""
+    api = dummy_api
+
+    manager = RuntimeContextManager()
+    manager.add_context("test1", dummy_api.run_context, CONTEXT_TIMEOUT)
+    manager.add_context("test2", dummy_api.run_context, CONTEXT_TIMEOUT * 2)  # longer timeout
+    manager.start()
+
+    # Open both contexts
+    await can_open_context(manager, ["test1", "test2"])
+    
+    # Both contexts should be open
+    await is_open(manager, ["test1", "test2"])
+
+    ctx1_id = await can_get_context_id(manager, "test1")
+    ctx2_id = await can_get_context_id(manager, "test2")
+    assert ctx1_id != ctx2_id, "Contexts should have different IDs"
+
+    # Wait for the first context to expire, but not the second
+    await asyncio.sleep(CONTEXT_TIMEOUT + 0.5)
+    
+    # First context should have expired, second should still be open
+    await is_not_open(manager, ["test1"])
+    await is_open(manager, ["test2"])
+
+    # Reopen just the first context
+    await can_open_context(manager, ["test1"])
+    
+    # Both should be open again
+    await is_open(manager, ["test1", "test2"])
+
+    # Close just the first context
+    await can_close_context(manager, ["test1"])
+    
+    # First should be closed, second still open
+    await is_not_open(manager, ["test1"])
+    await is_open(manager, ["test2"])
+
+    await can_shutdown(manager)
+
+
+@pytest.mark.asyncio
+async def test_context_manager_open_one_doesnt_affect_expiration(dummy_api: MockAPI):
+    """Test that opening one context doesn't prevent others from expiring"""
+    api = dummy_api
+
+    manager = RuntimeContextManager()
+    manager.add_context("test1", dummy_api.run_context, CONTEXT_TIMEOUT)
+    manager.add_context("test2", dummy_api.run_context, CONTEXT_TIMEOUT)
+    manager.start()
+
+    # Open both contexts initially
+    await can_open_context(manager, ["test1", "test2"])
+
+    # Check that both contexts are open
+    await is_open(manager, ["test1", "test2"])
+    
+    # Get the initial context IDs
+    ctx1_id = await can_get_context_id(manager, "test1")
+    ctx2_id = await can_get_context_id(manager, "test2")
+    
+    # Wait almost until timeout
+    await asyncio.sleep(CONTEXT_TIMEOUT - 0.5)
+    
+    # Refresh only test1
+    await can_open_context(manager, ["test1"])
+    
+    # Wait for test2 to expire
+    await asyncio.sleep(1)
+    
+    # test1 should still be open with the same ID, test2 should have expired
+    await is_open(manager, ["test1"])
+    await is_not_open(manager, ["test2"])
+    new_ctx1_id = await can_get_context_id(manager, "test1")
+    assert new_ctx1_id == ctx1_id, "Context 1 should have the same ID"
+    
+    # Reopen test2
+    await can_open_context(manager, ["test2"])
+    
+    # test2 should be open again but with a new ID
+    await is_open(manager, ["test1", "test2"])
+    new_ctx2_id = await can_get_context_id(manager, "test2")
+    assert new_ctx2_id != ctx2_id, "Context 2 should have a new ID"
 
     await can_shutdown(manager)

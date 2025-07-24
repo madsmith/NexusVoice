@@ -135,7 +135,10 @@ class RuntimeContextManager:
         # Events for communication
         # Request events
         self._context_open_requested = asyncio.Event()
+        self._context_open_ids = asyncio.Queue()
         self._context_close_requested = asyncio.Event()
+        self._context_close_ids = asyncio.Queue()
+
         # Response events
         self._context_open_complete = asyncio.Event()
         self._context_close_complete = asyncio.Event()
@@ -156,12 +159,28 @@ class RuntimeContextManager:
             timeout
         )
     
+    async def _queue_ids(self, ids: str | list[str] | None, queue: asyncio.Queue):
+        if ids is None:
+            ids = list(self._contexts.keys())
+        elif isinstance(ids, str):
+            ids = [ids]
+
+        for id in ids:
+            await queue.put(id)
+
     async def open(self, context_ids: str | list[str] | None = None):
         """Request to open the context. Returns when context is open."""
         logfire.info("RuntimeContextManager::open")
         self._context_open_complete.clear()
+
+        # Communicate which context_ids to open
+        await self._queue_ids(context_ids, self._context_open_ids)
+
+        # Request to open the context
         self._context_open_requested.set()
         self._context_wake_up_requested.set()
+
+        # Wait for the context to be open
         await self._context_open_complete.wait()
         self._context_open_complete.clear()
 
@@ -169,8 +188,15 @@ class RuntimeContextManager:
         """Request to close the context. Returns when context is closed."""
         logfire.info("RuntimeContextManager::close")
         self._context_close_complete.clear()
+
+        # Communicate which context_ids to close
+        await self._queue_ids(context_ids, self._context_close_ids)
+
+        # Request to close the context
         self._context_close_requested.set()
         self._context_wake_up_requested.set()
+
+        # Wait for the context to be closed
         await self._context_close_complete.wait()
         self._context_close_complete.clear()
 
@@ -229,15 +255,23 @@ class RuntimeContextManager:
                 
                 # Handle open / close events
                 if self._context_open_requested.is_set():
-                    logfire.info(f"ContextManager: Open requested")
-                    await self._open_contexts()
+                    context_ids = []
+                    while not self._context_open_ids.empty():
+                        context_ids.append(await self._context_open_ids.get())
+
+                    logfire.info(f"ContextManager: Open requested for {context_ids}")
+                    await self._open_contexts(context_ids)
                     self._context_open_requested.clear()
                     self._context_open_complete.set()
                     self._state_machine.on_event(ContextEvent.OPENED)
 
                 elif self._context_close_requested.is_set():
-                    logfire.info(f"ContextManager: Close requested")
-                    await self._close_contexts()
+                    context_ids = []
+                    while not self._context_close_ids.empty():
+                        context_ids.append(await self._context_close_ids.get())
+                    
+                    logfire.info(f"ContextManager: Close requested for {context_ids}")
+                    await self._close_contexts(context_ids)
                     self._context_close_requested.clear()
                     self._context_close_complete.set()
                     is_shutdown = self._state_machine.state == ContextState.SHUTTING_DOWN
@@ -277,8 +311,16 @@ class RuntimeContextManager:
             return min(timeouts, key=lambda x: x[1])
         return None
     
-    async def _open_contexts(self):
-        for context_id, managed_context in self._contexts.items():
+    async def _open_contexts(self, context_ids: list[str]):
+        # Default to all context ids if none specified
+        if len(context_ids) == 0:
+            context_ids = self._contexts.keys()
+
+        for context_id in context_ids:
+            managed_context = self._contexts.get(context_id)
+            if managed_context is None:
+                logfire.warning(f"ContextManager: No context found for {context_id}")
+                continue
             if not managed_context.is_open:
                 logfire.info(f"ContextManager: Opening context for {context_id}")
                 await managed_context.open()
@@ -286,8 +328,16 @@ class RuntimeContextManager:
                 logfire.info(f"ContextManager: Refreshing context for {context_id}")
                 await managed_context.refresh()
     
-    async def _close_contexts(self):
-        for context_id, managed_context in self._contexts.items():
+    async def _close_contexts(self, context_ids: list[str]):
+        # Default to all context ids if none specified
+        if len(context_ids) == 0:
+            context_ids = self._contexts.keys()
+        
+        for context_id in context_ids:
+            managed_context = self._contexts.get(context_id)
+            if managed_context is None:
+                logfire.warning(f"ContextManager: No context found for {context_id}")
+                continue
             if managed_context.is_open:
                 logfire.info(f"ContextManager: Closing context for {context_id}")
                 await managed_context.close()
