@@ -2,7 +2,7 @@ import logfire
 import pytest
 
 from nexusvoice.core.config import load_config
-from nexusvoice.client.RuntimeContextManager import RuntimeContextManager
+from nexusvoice.utils.RuntimeContextManager import RuntimeContextManager
 from nexusvoice.core.api.base import AsyncContext
 import asyncio
 

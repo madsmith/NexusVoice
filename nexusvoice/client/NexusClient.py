@@ -23,7 +23,7 @@ from nexusvoice.client.commands import (
     CommandProcessText
 )
 from nexusvoice.client.RecordingState import RecordingState, RecEvent, RecState
-from nexusvoice.client.RuntimeContextManager import RuntimeContextManager
+from nexusvoice.utils.RuntimeContextManager import RuntimeContextManager
 from nexusvoice.core.api import NexusAPI, NexusAPIContext
 from nexusvoice.core.api.online import NexusAPIOnline
 from nexusvoice.core.config import NexusConfig
