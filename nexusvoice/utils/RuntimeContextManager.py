@@ -142,21 +142,21 @@ class RuntimeContextManager:
         # Wake up event - called when request events are set
         self._context_wake_up_requested = asyncio.Event()
 
-    def get_context(self, client_id: str) -> AsyncContext[Any] | None:
-        return self._contexts[client_id].context
+    def get_context(self, context_id: str) -> AsyncContext[Any] | None:
+        return self._contexts[context_id].context
 
     def add_context(
         self,
-        client_id: str,
+        context_id: str,
         context_provider: Callable[[], AsyncContext] | Callable[[], Awaitable[AsyncContext]],
         timeout: float
     ):
-        self._contexts[client_id] = ManagedContext(
+        self._contexts[context_id] = ManagedContext(
             context_provider,
             timeout
         )
     
-    async def open(self):
+    async def open(self, context_ids: str | list[str] | None = None):
         """Request to open the context. Returns when context is open."""
         logfire.info("RuntimeContextManager::open")
         self._context_open_complete.clear()
@@ -165,7 +165,7 @@ class RuntimeContextManager:
         await self._context_open_complete.wait()
         self._context_open_complete.clear()
 
-    async def close(self):
+    async def close(self, context_ids: str | list[str] | None = None):
         """Request to close the context. Returns when context is closed."""
         logfire.info("RuntimeContextManager::close")
         self._context_close_complete.clear()
@@ -267,36 +267,36 @@ class RuntimeContextManager:
     def _get_next_timeout(self) -> tuple[str, float] | None:
         timeouts = []
         now = asyncio.get_event_loop().time()
-        for client_id, managed_context in self._contexts.items():
+        for context_id, managed_context in self._contexts.items():
             if managed_context.is_open:
                 # Compute the time until the context expires
                 close_at = managed_context.close_at
                 timeout = close_at - now
-                timeouts.append((client_id, timeout))
+                timeouts.append((context_id, timeout))
         if timeouts:
             return min(timeouts, key=lambda x: x[1])
         return None
     
     async def _open_contexts(self):
-        for client_id, managed_context in self._contexts.items():
+        for context_id, managed_context in self._contexts.items():
             if not managed_context.is_open:
-                logfire.info(f"ContextManager: Opening context for {client_id}")
+                logfire.info(f"ContextManager: Opening context for {context_id}")
                 await managed_context.open()
             else:
-                logfire.info(f"ContextManager: Refreshing context for {client_id}")
+                logfire.info(f"ContextManager: Refreshing context for {context_id}")
                 await managed_context.refresh()
     
     async def _close_contexts(self):
-        for client_id, managed_context in self._contexts.items():
+        for context_id, managed_context in self._contexts.items():
             if managed_context.is_open:
-                logfire.info(f"ContextManager: Closing context for {client_id}")
+                logfire.info(f"ContextManager: Closing context for {context_id}")
                 await managed_context.close()
 
-    async def _close_context(self, client_id: str):
-        managed_context = self._contexts.get(client_id)
+    async def _close_context(self, context_id: str):
+        managed_context = self._contexts.get(context_id)
         if managed_context is None:
-            logfire.warning(f"ContextManager: No context found for {client_id}")
+            logfire.warning(f"ContextManager: No context found for {context_id}")
             return
         if managed_context.is_open:
-            logfire.info(f"ContextManager: Closing context for {client_id}")
+            logfire.info(f"ContextManager: Closing context for {context_id}")
             await managed_context.close()
