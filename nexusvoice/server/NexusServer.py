@@ -64,7 +64,7 @@ class NexusServer:
     async def start(self):
         """Initialize the server socket and start listening for connections"""
         # Discover and initialize tasks
-        await self._discover_tasks()
+        await self._load_tasks()
         
         logfire.info(f"Starting NexusServer on {self.host}:{self.port}")
         self.server = await asyncio.start_server(
@@ -110,56 +110,60 @@ class NexusServer:
             command, handler, params, description
         )
         
-    @logfire.instrument("Discovering tasks")
-    async def _discover_tasks(self):
+    @logfire.instrument("Loading tasks")
+    async def _load_tasks(self):
         """Discover, instantiate, and register NexusTask classes"""
         import nexusvoice.server.tasks as tasks_module
         
         # Find all submodules in the tasks package
-        for _, name, is_pkg in pkgutil.iter_modules(tasks_module.__path__, tasks_module.__name__ + "."):
-            if not is_pkg and name != tasks_module.__name__ + ".base":
-                try:
-                    # Import the module
-                    module = importlib.import_module(name)
+        with logfire.span("Discovering tasks"):
+            for _, name, is_pkg in pkgutil.iter_modules(tasks_module.__path__, tasks_module.__name__ + "."):
+                if not is_pkg and name != tasks_module.__name__ + ".base":
+                    try:
+                        # Import the module
+                        module = importlib.import_module(name)
                     
-                    # Find all NexusTask subclasses in the module
-                    for attr_name in dir(module):
-                        attr = getattr(module, attr_name)
-                        if (inspect.isclass(attr) and issubclass(attr, NexusTask) and attr != NexusTask):
-                            # Instantiate the task
-                            task = attr(self, self.config)
-                            logfire.info(f"Discovered task: {attr.__name__}")
-                            self.tasks.append(task)
-                except Exception as e:
-                    logfire.error(f"Error loading task module {name}: {e}")
+                        # Find all NexusTask subclasses in the module
+                        for attr_name in dir(module):
+                            attr = getattr(module, attr_name)
+                            if (inspect.isclass(attr) and issubclass(attr, NexusTask) and attr != NexusTask):
+                                # Instantiate the task
+                                task = attr(self, self.config)
+                                logfire.info(f"Discovered task: {attr.__name__}")
+                                self.tasks.append(task)
+                    except Exception as e:
+                        logfire.error(f"Error loading task module {name}: {e}")
         
         # Register all tasks
-        failed_tasks = []
-        for task in self.tasks:
-            try:
-                task.register()
-                logfire.info(f"Registered task: {task.__class__.__name__}")
-            except Exception as e:
-                logfire.error(f"Error registering task {task.__class__.__name__}: {e}")
-                failed_tasks.append(task)
+        with logfire.span("Registering tasks"):
+            failed_tasks = []
+            for task in self.tasks:
+                try:
+                    task.register()
+                    logfire.info(f"Registered task: {task.__class__.__name__}")
+                except Exception as e:
+                    logfire.error(f"Error registering task {task.__class__.__name__}: {e}")
+                    failed_tasks.append(task)
 
-        # Remove failed tasks
-        self.tasks = [task for task in self.tasks if task not in failed_tasks]
+            # Remove failed tasks
+            self.tasks = [task for task in self.tasks if task not in failed_tasks]
 
         # Initialize tasks
-        initialized_tasks = []
-        for task in self.tasks:
-            try:
-                success = await task.initialize()
-                if success:
-                    initialized_tasks.append(task)
-                else:
-                    logfire.error(f"Task {task.__class__.__name__} failed to initialize")
-            except Exception as e:
-                logfire.error(f"Error initializing task {task.__class__.__name__}: {e}")
-        
-        # Replace tasks list with only successfully initialized tasks
-        self.tasks = initialized_tasks
+        with logfire.span("Initializing tasks"):
+            initialized_tasks = []
+            for task in self.tasks:
+                try:
+                    with logfire.span(f"Initializing task: {task.__class__.__name__}"):
+                        success = await task.initialize()
+                        if success:
+                            initialized_tasks.append(task)
+                        else:
+                            logfire.error(f"Task {task.__class__.__name__} failed to initialize")
+                except Exception as e:
+                    logfire.error(f"Error initializing task {task.__class__.__name__}: {e}")
+            
+            # Replace tasks list with only successfully initialized tasks
+            self.tasks = initialized_tasks
                 
     async def _stop_tasks(self):
         """Stop all running tasks"""

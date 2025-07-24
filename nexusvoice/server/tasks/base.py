@@ -45,12 +45,14 @@ class NexusTask(ABC):
         # 
         return self._registry
     
+    @logfire.instrument("Initializing task")
     async def initialize(self) -> bool:
         """
         Initialize the task and resolve dependencies.
         """
         # Acquire required services
         for service_id, service_type in self.required_services.items():
+            logfire.info(f"Acquiring required service: {service_id}")
             try:
                 service = await self.registry.wait_for_service(
                     service_id, service_type, self.name, timeout=10)
@@ -62,6 +64,7 @@ class NexusTask(ABC):
                 
         # Try to acquire optional services
         for service_id, service_type in self.optional_services.items():
+            logfire.info(f"Acquiring optional service: {service_id}")
             service = await self.registry.get_service(service_id, service_type, self.name)
             if service:
                 self._optional_services[service_id] = service
@@ -70,6 +73,7 @@ class NexusTask(ABC):
         # Register provided services
         self._provided_instances = await self._create_provided_services()
         for service_id, instance in self._provided_instances.items():
+            logfire.info(f"Registering provided service: {service_id}")
             service_type = self.provided_services[service_id]
             await self.registry.register_service(service_id, service_type, self.name, instance)
             
