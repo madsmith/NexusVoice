@@ -22,7 +22,7 @@ class SampleTask(NexusTask):
             count += 1
             await asyncio.sleep(30)
 
-    async def _handle_sample(self, client_id: str, payload: dict) -> str:
+    async def _handle_sample(self, client_id: str) -> str:
         """Handle sample command from client"""
         logfire.info(f"Sample from {client_id}")
         return "no sample for you"

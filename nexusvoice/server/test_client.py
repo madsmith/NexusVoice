@@ -173,15 +173,15 @@ class REPLClient:
         if cmd_name in self.command_map:
             command_info = self.command_map[cmd_name]
             # Index parameters by position
-            expected_params = {i: param for i, param in enumerate(command_info.parameters)}
-
+            expected_params = {i + 1: param_name for i, param_name in enumerate(command_info.parameters)}
+            
             # Parse arguments
             args = {}
             for i in range(1, len(parts)):
                 if i in expected_params:
-                    param_info = expected_params[i]
+                    param_name = expected_params[i]
                     # TODO: Validate arguments
-                    args[param_info.name] = parts[i]
+                    args[param_name] = parts[i]
                 else:
                     print(f"Invalid argument: {parts[i]}")
                     return True

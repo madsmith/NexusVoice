@@ -1,8 +1,29 @@
-from typing import  Annotated, Any, Awaitable, Callable, Literal, Union
+from typing import Annotated, Any, Awaitable, Callable, Literal, TypeVar, Union
 from pydantic import BaseModel, Field, model_validator
 
 
-CommandHandlerT = Callable[[str, dict], Union[Any, Awaitable[Any]]]
+R = TypeVar('R', covariant=True)
+
+CommandHandlerT = Callable[..., Union[R, Awaitable[R]]]
+
+class CommandParameterError(Exception):
+    """Exception raised for errors in command parameters"""
+    
+    def __init__(self, message: str, missing_params: list[str]  | None = None, invalid_params: dict[str, str] | None = None):
+        self.message = message
+        self.missing_params = missing_params or []
+        self.invalid_params = invalid_params or {}
+        
+        # Build a detailed error message
+        details = [message]
+        if self.missing_params:
+            details.append(f"Missing parameters: {', '.join(self.missing_params)}")
+        if self.invalid_params:
+            for param, error in self.invalid_params.items():
+                details.append(f"Invalid parameter '{param}': {error}")
+                
+        super().__init__("\n".join(details))
+
 
 class CommandDefinition:
     def __init__(

@@ -17,6 +17,7 @@ from .types import (
     CommandHandlerT,
     CommandInfo,
     CommandListResponse,
+    CommandParameterError,
     CommandParameterInfo,
     ServerInboundMessage,
 )
@@ -260,12 +261,29 @@ class NexusServer:
                 command_definition = self.command_registry.get(msg.command)
                 if command_definition:
                     try:
-                        result = await command_definition.handler(client_id, msg.payload)
+                        # Marshal arguments from payload based on command definition
+                        args = self._marshal_arguments(msg.command, command_definition, msg.payload)
+                        
+                        # Call the handler with the marshaled arguments
+                        result = await command_definition.handler(client_id, **args)
                         response = CallResponseSuccess(
                             request_id=msg.request_id,
                             result=result
                         )
+                    except CommandParameterError as e:
+                        # Handle parameter validation errors
+                        logfire.info(f"Parameter validation error for command {msg.command}: {e.message}")
+                        response = CallResponseError(
+                            request_id=msg.request_id,
+                            error="Invalid command parameters",
+                            details={
+                                "message": e.message,
+                                "missing_parameters": e.missing_params,
+                                "invalid_parameters": e.invalid_params
+                            }
+                        )
                     except Exception as e:
+                        logfire.error(f"Error executing command {msg.command}: {e}")
                         response = CallResponseError(
                             request_id=msg.request_id,
                             error=f"Command execution error",
@@ -282,6 +300,75 @@ class NexusServer:
         except Exception as e:
             logfire.error(f"Unexpected error in _process_command: {e}")
     
+    def _marshal_arguments(self, command_name: str, command_def: CommandDefinition, payload: dict) -> dict:
+        """
+        Convert and validate arguments from the payload according to command parameter specifications.
+        
+        Args:
+            command_name: The name of the command being executed
+            command_def: The command definition with parameter types
+            payload: The raw payload from the client
+            
+        Returns:
+            A dictionary of validated and converted arguments
+            
+        Raises:
+            CommandParameterError: If parameters are missing or invalid
+        """
+        if not command_def.params:
+            # No parameters defined for this command, return payload as-is
+            return payload or {}
+        
+        # Initialize arguments dictionary
+        args = {}
+        missing_params = []
+        invalid_params = {}
+        
+        # Check for each defined parameter
+        for param_name, param_type in command_def.params.items():
+            if param_name not in payload:
+                missing_params.append(param_name)
+                continue
+                
+            # Get the value from the payload
+            value = payload[param_name]
+            
+            # Try to convert/validate the value
+            try:
+                # Handle basic types
+                if param_type == str:
+                    args[param_name] = str(value)
+                elif param_type == int:
+                    args[param_name] = int(value)
+                elif param_type == float:
+                    args[param_name] = float(value)
+                elif param_type == bool:
+                    # Support various boolean representations
+                    if isinstance(value, bool):
+                        args[param_name] = value
+                    elif isinstance(value, str):
+                        args[param_name] = value.lower() in ('true', 'yes', '1', 'y')
+                    elif isinstance(value, (int, float)):
+                        args[param_name] = bool(value)
+                    else:
+                        invalid_params[param_name] = f"Cannot convert {type(value).__name__} to bool"
+                else:
+                    # For other types, just pass through and hope for the best
+                    # In a more robust system, we would use a more sophisticated validation system
+                    args[param_name] = value
+            except (ValueError, TypeError) as e:
+                invalid_params[param_name] = str(e)
+        
+        # Check if there were any issues
+        if missing_params or invalid_params:
+            raise CommandParameterError(
+                message=f"Invalid parameters for command '{command_name}'", 
+                missing_params=missing_params, 
+                invalid_params=invalid_params
+            )
+            
+        return args
+    
     @logfire.instrument("Send Response")
     async def _send_response(self, writer: asyncio.StreamWriter, response: CallResponse | BroadcastMessage):
         try:
@@ -291,7 +378,7 @@ class NexusServer:
         except Exception as e:
             logfire.error(f"Error sending response: {e}")
 
-    async def _handle_list_commands(self, client_id: str, payload: dict) -> CommandListResponse:
+    async def _handle_list_commands(self, client_id: str) -> CommandListResponse:
         """
         Present a list of available commands to the client
         """
@@ -310,12 +397,12 @@ class NexusServer:
             ))
         return CommandListResponse(commands=commands)
         
-    async def _handle_ping(self, client_id: str, payload: dict) -> str:
+    async def _handle_ping(self, client_id: str) -> str:
         """Handle ping command from client"""
         logfire.info(f"Ping from {client_id}")
         return "pong"
 
-    async def _handle_queue_broadcast(self, client_id: str, payload: dict) -> str:
+    async def _handle_queue_broadcast(self, client_id: str) -> str:
         """Handle queue broadcast command from client"""
         logfire.info(f"Queue broadcast from {client_id}")
         # defer queue a broadcast message in 2 seconds
