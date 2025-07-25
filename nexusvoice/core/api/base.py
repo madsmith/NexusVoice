@@ -9,7 +9,7 @@ class ModelResponse(PydanticModelResponse):
         return "".join(getattr(part, "content", "") for part in self.parts)
 
 
-from typing import TypeVar, Generic
+from typing import Protocol, TypeVar, Generic
 
 T = TypeVar("T")
 
@@ -46,6 +46,10 @@ class NexusHistoryContext(AsyncContext[NexusHistoryContextType], ABC):
     """
     pass
     
+class NexusAPIProtocol(Protocol):
+    """Protocol for NexusAPI."""
+    
+    async def prompt_agent(self, agent_id: str, prompt: str) -> str: ...
 
 class NexusAPI(ABC):
     """A class to interact with the Nexus API."""
