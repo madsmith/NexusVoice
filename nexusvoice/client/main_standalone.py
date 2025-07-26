@@ -17,8 +17,8 @@ from nexusvoice.core.config import load_config
 async def run_client():
     voice_client: NexusVoiceClient | None = None
     try:
-        with logfire.span("NexusVoiceClient"):
-            parser = argparse.ArgumentParser(description="NexusVoice Online Client")
+        with logfire.span("NexusVoiceStandaloneClient"):
+            parser = argparse.ArgumentParser(description="NexusVoice Standalone Client")
             parser.add_argument('-c', '--cmd', nargs=argparse.REMAINDER, help='Send a command prompt to the client')
             parser.add_argument('-v', '--verbose', action='store_true', help='Enable verbose logging')
             args = parser.parse_args()

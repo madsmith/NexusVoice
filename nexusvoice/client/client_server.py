@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 from nexusvoice.core.config import NexusConfig
 from nexusvoice.client.client import NexusClientBase
 from nexusvoice.core.api.online import NexusAPIOnline
+from nexusvoice.server.connection import NexusConnection
 from nexusvoice.utils.RuntimeContextManager import RuntimeContextManager
 
 if TYPE_CHECKING:
@@ -15,10 +16,13 @@ else:
 logger = logging.getLogger(__name__)
 
 class NexusClientServer(NexusClientBase):
-    def __init__(self, client_id: str, config: NexusConfig):
+    def __init__(self, host: str, port: int, client_id: str, config: NexusConfig):
         super().__init__(client_id, config)
-        self._api: NexusAPIOnline = NexusAPIOnline(self.config)
-        self._context_manager: RuntimeContextManager = RuntimeContextManager()
+        
+        self._host = host
+        self._port = port
+
+        self._connection: NexusConnection = NexusConnection(self._host, self._port)
 
         self._voice_client: NexusVoiceClient | None = None
 
@@ -31,37 +35,18 @@ class NexusClientServer(NexusClientBase):
     async def initialize(self, voice_client: NexusVoiceClient):
         self._voice_client = voice_client
 
-        await self._api.initialize()
-
-        # Initialize Context Manager
-        agent_context_provider = self._api.create_api_context
-        history_context_provider = self._api.create_history_context
-
-        self._context_manager.add_context(
-            "agent-context",
-            agent_context_provider,
-            self.config.get("nexus.client.timeouts.agent_context", 300)
-        )
-
-        self._context_manager.add_context(
-            "history-context",
-            history_context_provider,
-            self.config.get("nexus.client.timeouts.history_context", 60)
-        )
-
     async def start(self):
-        with logfire.span("ContextManager Lifecycle"):
-            self._context_manager.start()
+        with logfire.span("Connection Lifecycle"):
+            await self._connection.connect()
 
     async def stop(self):
-        await self._context_manager.close()
-        await self._context_manager.stop()
+        if self._connection.connected:
+            await self._connection.disconnect()
 
     async def process_text(self, text: str):
-        await self._context_manager.open()
-
         try:
-            response = await self._api.prompt_agent(self.client_id, text)
+            response = await self._connection.send_command(
+                "prompt_agent", {"prompt": text})
             return response
         except Exception as e:
             # TODO: Remove This - api shouldn't throw exceptions
