@@ -9,12 +9,12 @@ from nexusvoice.utils.logging import get_logger
 logger = get_logger(__name__)
 
 from nexusvoice.utils.debug import reset_logging
-from nexusvoice.client.NexusClient import NexusVoiceClient
+from nexusvoice.client.NexusClient import NexusVoiceClient, NexusClientStandalone
 from nexusvoice.client.commands import CommandProcessText
 from nexusvoice.core.config import load_config
 
 async def run_client():
-    client: NexusVoiceClient | None = None
+    voice_client: NexusVoiceClient | None = None
     try:
         with logfire.span("NexusVoiceClient"):
             parser = argparse.ArgumentParser(description="NexusVoice Online Client")
@@ -39,21 +39,23 @@ async def run_client():
                 instance.config._initialized = False
                 instance.config.initialize()
             
-            client = NexusVoiceClient("local", config)
+            client = NexusClientStandalone("local", config)
+            voice_client = NexusVoiceClient("local", config, client)
+
             
             # In the future, NexusVoiceClient should support async start/stop
-            run_coro = client.run()
+            run_coro = voice_client.run()
 
             if args.cmd:
                 prompt = " ".join(args.cmd).strip()
                 if prompt:
-                    client.add_command(CommandProcessText(prompt))
+                    voice_client.add_command(CommandProcessText(prompt))
 
             await run_coro
     except KeyboardInterrupt:
         logger.warning(f"Exiting due to KeyboardInterrupt - run_client")
-        if client is not None:
-            await client.stop()
+        if voice_client is not None:
+            await voice_client.stop()
     except Exception as e:
         logger.error(e)
         import traceback

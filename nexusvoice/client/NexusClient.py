@@ -10,6 +10,7 @@ from silero_vad.model import OnnxWrapper
 import time
 import torch
 import torchaudio
+from typing import Protocol
 
 from nexusvoice.ai.AudioInferenceEngine import AudioInferenceEngine
 from nexusvoice.ai.TTSInferenceEngine import TTSInferenceEngine
@@ -52,16 +53,14 @@ INFERENCE_FRAMEWORK = "onnx"
 ACTIVATION_THRESHOLD = 0.5
 
 class NexusVoiceClient:
-    def __init__(self, client_id: str, config: NexusConfig):
-        self.name = f"NexusVoiceClient::{client_id}"
+    def __init__(self, client_id: str, config: NexusConfig, client: "NexusClientProtocol"):
+        self.name = f"{self.__class__.__name__}::{client_id}"
         self.daemon = True
 
         self.client_id = client_id
         self.config = config
 
-        self._api: NexusAPI | None = None
-        self._context_manager: RuntimeContextManager | None = None
-        self.context: NexusAPIContext | None = None
+        self.client = client
 
         self._audio_device: AudioDevice | None = None
 
@@ -112,20 +111,9 @@ class NexusVoiceClient:
         assert self._tts_engine is not None, f"{self.__class__.__name__} not initialized, tts engine not available"
         return self._tts_engine
 
-    @property
-    def api(self) -> NexusAPI:
-        assert self._api is not None, f"{self.__class__.__name__} not initialized, api not available"
-        return self._api
-
-    @property
-    def context_manager(self) -> RuntimeContextManager:
-        assert self._context_manager is not None, f"{self.__class__.__name__} not initialized, context manager not available"
-        return self._context_manager
-
     async def initialize(self):
         with logfire.span("Initialize"):
-            await self._initialize_api()
-            self._initialize_context_manager()
+            await self.client.initialize(self)
             
             self._initialize_wake_word_model()
             self._initialize_VAD_model()
@@ -135,34 +123,6 @@ class NexusVoiceClient:
             self._initialize_audio_device()
 
             self._interaction_log.init_db()
-        
-        # Move context manager logging out of the initialization span
-        with logfire.span("ContextManager Lifecycle"):
-            self.context_manager.start()
-
-    @logfire.instrument("Initialize API")
-    async def _initialize_api(self):
-        logger.info("Initializing API")
-        self._api = NexusAPIOnline(self.config)
-        await self._api.initialize()
-
-    @logfire.instrument("Initialize Context Manager")
-    def _initialize_context_manager(self):
-        logger.info("Initializing context manager")
-        self._context_manager = RuntimeContextManager()
-        assert self._api is not None, "API not initialized"
-        run_context_provider = self._api.create_api_context
-        history_context_provider = self._api.create_history_context
-        self._context_manager.add_context(
-            "agent-context",
-            run_context_provider,
-            self.config.get("nexus.client.timeouts.agent_context", 300)
-        )
-        self._context_manager.add_context(
-            "history-context",
-            history_context_provider,
-            self.config.get("nexus.client.timeouts.history_context", 60)
-        )
 
     @logfire.instrument("Initialize Audio Device")
     def _initialize_audio_device(self):
@@ -213,12 +173,17 @@ class NexusVoiceClient:
         voice = self.config.get("nexus.tts.voice", None)
         self._tts_engine = TTSInferenceEngine(voices=voice)
         self._tts_engine.initialize()
-        
+
+    async def start(self):
+        with logfire.span("start"):
+            await self.client.start()
+
     async def run(self):
         try:
             logger.info(f"Starting {self.__class__.__name__} {self.client_id}")
 
             await self.initialize()
+            await self.start()
 
             self.running = True
 
@@ -354,7 +319,7 @@ class NexusVoiceClient:
         filename = Path("recordings", f"recording_{self.client_id}_{int(time.time())}_audio.wav")
         if self.config.get("nexus.client.save_recordings", False):
             task = asyncio.create_task(save_recording_async(command.audio_bytes, filename))
-            def on_task_done(task):
+            def on_task_done(task: asyncio.Task[None]):
                 try:
                     task.result()
                     logger.info(f"Saved recording to {filename}")
@@ -384,18 +349,8 @@ class NexusVoiceClient:
 
     @logfire.instrument("Do Text Inference")
     async def _do_text_inference(self, text: str):
-        await self.context_manager.open()
+        response = await self.client.process_text(text)
 
-        # Use PydanticAgent for conversation/reasoning
-        try:
-            response = await self.api.prompt_agent(self.client_id, text)
-        except Exception as e:
-            # TODO: Remvoe This - api shouldn't throw exceptions
-            logger.error(f"Error processing command: {e}")
-            # Show the traceback
-            import traceback
-            logger.error(traceback.format_exc())
-            return
         should_followup = response.endswith("?")
 
         logger.info(f"Response: {response}")
@@ -585,9 +540,8 @@ class NexusVoiceClient:
                 logger.info(f"Stopping {self.name}")
                 self.running = False
 
-                await self.context_manager.close()
-                await self.context_manager.stop()
-                    
+                self.client.stop()
+
                 if self._recording_state.is_recording():
                     self._speech_buffer.clear()
                     self.stopRecording(cancel=True)
@@ -598,3 +552,77 @@ class NexusVoiceClient:
         logger.debug(f"Adding command {command}")
         self._command_queue.put_nowait(command)
 
+class NexusClientProtocol(Protocol):
+    async def initialize(self, voice_client: NexusVoiceClient):
+        ...
+
+    async def start(self):
+        ...
+
+    async def stop(self):
+        ...
+        
+    async def process_text(self, text: str) -> str:
+        ...
+
+class NexusClientBase(NexusClientProtocol):
+    def __init__(self, client_id: str, config: NexusConfig):
+        self.client_id = client_id
+        self.config = config
+
+class NexusClientStandalone(NexusClientBase):
+    def __init__(self, client_id: str, config: NexusConfig):
+        super().__init__(client_id, config)
+        self._api: NexusAPI = NexusAPIOnline(self.config)
+        self._context_manager: RuntimeContextManager = RuntimeContextManager()
+
+        self._voice_client: NexusVoiceClient | None = None
+
+    @property
+    def voice_client(self) -> NexusVoiceClient:
+        if self._voice_client is None:
+            raise RuntimeError("Voice client not initialized")
+        return self._voice_client
+    
+    async def initialize(self, voice_client: NexusVoiceClient):
+        self._voice_client = voice_client
+
+        await self._api.initialize()
+
+        # Initialize Context Manager
+        agent_context_provider = self._api.create_api_context
+        history_context_provider = self._api.create_history_context
+
+        self._context_manager.add_context(
+            "agent-context",
+            agent_context_provider,
+            self.config.get("nexus.client.timeouts.agent_context", 300)
+        )
+
+        self._context_manager.add_context(
+            "history-context",
+            history_context_provider,
+            self.config.get("nexus.client.timeouts.history_context", 60)
+        )
+
+    async def start(self):
+        with logfire.span("ContextManager Lifecycle"):
+            self._context_manager.start()
+
+    async def stop(self):
+        await self._context_manager.close()
+        await self._context_manager.stop()
+
+    async def process_text(self, text: str):
+        await self._context_manager.open()
+
+        try:
+            response = await self._api.prompt_agent(self.client_id, text)
+            return response
+        except Exception as e:
+            # TODO: Remove This - api shouldn't throw exceptions
+            logger.error(f"Error processing command: {e}")
+            # Show the traceback
+            import traceback
+            logger.error(traceback.format_exc())
+            return ""
