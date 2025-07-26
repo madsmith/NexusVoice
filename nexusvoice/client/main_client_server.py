@@ -9,7 +9,8 @@ from nexusvoice.utils.logging import get_logger
 logger = get_logger(__name__)
 
 from nexusvoice.utils.debug import reset_logging
-from nexusvoice.client.NexusClient import NexusVoiceClient, NexusClientStandalone
+from nexusvoice.client.voice_client import NexusVoiceClient
+from nexusvoice.client.client_server import NexusClientServer
 from nexusvoice.client.commands import CommandProcessText
 from nexusvoice.core.config import load_config
 
@@ -39,7 +40,7 @@ async def run_client():
                 instance.config._initialized = False
                 instance.config.initialize()
             
-            client = NexusClientStandalone("local", config)
+            client = NexusClientServer("local", config)
             voice_client = NexusVoiceClient("local", config, client)
 
             

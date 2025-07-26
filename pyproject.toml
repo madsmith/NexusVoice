@@ -33,7 +33,8 @@ dependencies = [
 ]
 
 [project.scripts]
-nexus-standalone = "nexusvoice.client.main:main"
+nexus-client-standalone = "nexusvoice.client.main_standalone:main"
+nexus-client = "nexusvoice.client.main_client_server:main"
 nexus-server = "nexusvoice.server.main:main"
 nexus-test-client = "nexusvoice.server.test_client:main"
 
