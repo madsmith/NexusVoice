@@ -32,7 +32,7 @@ from nexusvoice.client.commands import (
     CommandProcessText
 )
 
-from nexusvoice.client.client import NexusClientProtocol
+from nexusvoice.client.client import NexusClientBase
 from nexusvoice.client.RecordingState import RecordingState, RecEvent, RecState
 
 logger = get_logger(__name__)
@@ -363,24 +363,12 @@ class NexusVoiceClient:
             spoken_response = self.config.get(
                 "nexus.client.no_response_error",
                 "Something went wrong, there is no response.")
-            
-        # Use TTS engine to speak the response
-        with logfire.span("TTS Inference"):
-            audio_tensor = self.tts_engine.infer(spoken_response, voice=self.config.get("nexus.tts.voice"))
-
-        # Convert the audio tensor to numpy array
-        audio = self._tensor_to_int16(self._resample_audio(audio_tensor))
         
-        # Play the response
-        with logfire.span("Play Audio"):
-            self.audio_device.play(audio)
-            audio_data = AudioData(audio)
-            await asyncio.sleep(audio_data.duration())
-
-            if should_followup:
-                self._silence_duration = 0
-                self._recording_state.on_event(RecEvent.LISTEN)
-            
+        await self.speak_response(spoken_response)
+        
+        if should_followup:
+            self._silence_duration = 0
+            self._recording_state.on_event(RecEvent.LISTEN)
 
     def _process_vad(self):
         """ Process data in the vad buffer if enough data is available"""
@@ -458,6 +446,19 @@ class NexusVoiceClient:
                     print(f"Detected wake word: {word} VAD: {self._speech_buffer.get_duration_ms()}ms")
                     self.add_command(CommandWakeWord(word, self._speech_buffer.get_bytes()))
                     self.startRecording()
+
+    async def speak_response(self, text: str):
+        with logfire.span("TTS Inference"):
+            audio_tensor = self.tts_engine.infer(text, voice=self.config.get("nexus.tts.voice"))
+
+        # Convert the audio tensor to numpy array
+        audio = self._tensor_to_int16(self._resample_audio(audio_tensor))
+
+        # Play the response
+        with logfire.span("Play Audio"):
+            self.audio_device.play(audio)
+            audio_data = AudioData(audio)
+            await asyncio.sleep(audio_data.duration())
 
     def _confirm_wake_word(self, command: CommandWakeWord):
         assert isinstance(command, CommandWakeWord), "Command is not a wake word command"

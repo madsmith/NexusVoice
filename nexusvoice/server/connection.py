@@ -4,8 +4,10 @@ import json
 import logfire
 from pydantic import ValidationError
 from pydantic.type_adapter import TypeAdapter
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol, Union, Awaitable
 import uuid
+
+from nexusvoice.utils.eventbus import EventBus
 
 from .types import (
     CallRequest,
@@ -19,6 +21,8 @@ from .types import (
 )
 
 message_adapter = TypeAdapter(ClientInboundMessage)
+
+type CallbackT = Callable[[Any], Union[Any, Awaitable[Any]]]
 
 class NexusServerServices(Protocol):
     """
@@ -48,6 +52,8 @@ class NexusConnection:
         self.call_id: int = 0
         self.pending_calls: dict[str, asyncio.Future] = {}
         self.lock = asyncio.Lock()
+
+        self._event_bus: EventBus = EventBus()
 
         self.running = False
         self.read_task = None
@@ -107,6 +113,15 @@ class NexusConnection:
     def get_task(self):
         """Get the message reading task"""
         return self.read_task
+
+    def subscribe(self, event_type: str, callback: CallbackT):
+        """Subscribe to events of a specific type with either a sync or async callback function
+        
+        Args:
+            event_type: The type of event to subscribe to
+            callback: A callback function that can be either synchronous or asynchronous
+        """
+        self._event_bus.subscribe(event_type, callback)
     
     async def _read_messages(self):
         """Background task to continuously read messages from the server"""
@@ -149,6 +164,8 @@ class NexusConnection:
         elif isinstance(msg, BroadcastMessage):
             response_msg = msg.message
             logfire.info(f"Broadcast: {response_msg}")
+            # Emit event for broadcast messages
+            await self._event_bus.emit('broadcast', msg.message)
         else:
             warning_msg = f"Unhandled message type: [{type(msg)}] {msg}"
             logfire.warning(warning_msg)
