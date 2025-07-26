@@ -47,11 +47,12 @@ class MCPConfigFactory():
     def __init__(self):
         self._prefix_ns = PrefixNamespace()
     
-    def create(self, config: dict) -> MCPServer:
+    def create(self, config: dict) -> MCPServer | None:
         if config["transport"] == "stdio":
             return self._create_stdio_mcp_server(config)
         else:
             logger.warning(f"Unknown transport type {config['transport']}")
+            return None
     
     def _create_stdio_mcp_server(self, config: dict) -> MCPServerStdio:
         if 'command' not in config:

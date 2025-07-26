@@ -84,6 +84,7 @@ class NexusVoiceClient:
             Path(self.config.get("nexus.client.interaction_log_path", "logs"))
         )
 
+        self._lock = asyncio.Lock()
         self.running = False
 
     @property
@@ -153,14 +154,14 @@ class NexusVoiceClient:
         run_context_provider = self._api.create_api_context
         history_context_provider = self._api.create_history_context
         self._context_manager.add_context(
-            "api-context",
+            "agent-context",
             run_context_provider,
-            self.config.get("nexus.client.context_timeout", 300)
+            self.config.get("nexus.client.timeouts.agent_context", 300)
         )
         self._context_manager.add_context(
             "history-context",
             history_context_provider,
-            self.config.get("nexus.client.history_context_timeout", 60)
+            self.config.get("nexus.client.timeouts.history_context", 60)
         )
 
     @logfire.instrument("Initialize Audio Device")
@@ -280,11 +281,11 @@ class NexusVoiceClient:
                             self._process_command(command),
                             name="Process Command")
                     except asyncio.CancelledError:
-                        logger.info(f"CancelledError - process_commands")
+                        logger.debug(f"CancelledError - process_commands")
                         logger.info(f"Shutting down {self.name}")
                         break
                     except KeyboardInterrupt:
-                        logger.info(f"Exiting due to KeyboardInterrupt - process_commands")
+                        logger.debug(f"Exiting due to KeyboardInterrupt - process_commands")
                         logger.info(f"Shutting down {self.name}")
                         break
                     except Exception as e:
@@ -386,7 +387,15 @@ class NexusVoiceClient:
         await self.context_manager.open()
 
         # Use PydanticAgent for conversation/reasoning
-        response = await self.api.prompt_agent(self.client_id, text)
+        try:
+            response = await self.api.prompt_agent(self.client_id, text)
+        except Exception as e:
+            # TODO: Remvoe This - api shouldn't throw exceptions
+            logger.error(f"Error processing command: {e}")
+            # Show the traceback
+            import traceback
+            logger.error(traceback.format_exc())
+            return
         should_followup = response.endswith("?")
 
         logger.info(f"Response: {response}")
@@ -569,21 +578,21 @@ class NexusVoiceClient:
             self.add_command(CommandProcessAudio(audio_data))
 
     async def stop(self):
-        if not self.running:
-            logger.warning("Client is not running")
-            return await asyncio.sleep(0)
+        async with self._lock:
+            if not self.running:
+                return await asyncio.sleep(0)
 
-        logger.info(f"Stopping {self.name}")
-        self.running = False
+                logger.info(f"Stopping {self.name}")
+                self.running = False
 
-        await self.context_manager.close()
-        await self.context_manager.stop()
-            
-        if self._recording_state.is_recording():
-            self._speech_buffer.clear()
-            self.stopRecording(cancel=True)
+                await self.context_manager.close()
+                await self.context_manager.stop()
+                    
+                if self._recording_state.is_recording():
+                    self._speech_buffer.clear()
+                    self.stopRecording(cancel=True)
 
-        self.audio_device.shutdown()
+                self.audio_device.shutdown()
 
     def add_command(self, command):
         logger.debug(f"Adding command {command}")

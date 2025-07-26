@@ -284,17 +284,19 @@ class RuntimeContextManager:
                 logfire.info("ContextManager: Cancelled")
                 if self._state_machine.state != ContextState.SHUT_DOWN:
                     self._state_machine.on_event(ContextEvent.SHUT_DOWN)
+            except ExceptionGroup as eg:
+                logfire.info("Catching ExceptionGroup")
+                logfire.exception("ContextManager: ExceptionGroup")
             except Exception as e:
-                logfire.error(f"ContextManager: Exception: {e} {[type(e).__name__]}")
-                if self._state_machine.state != ContextState.SHUT_DOWN:
-                    self._state_machine.on_event(ContextEvent.SHUT_DOWN)
+                logfire.info("Catching Exception")
+                logfire.exception(f"ContextManager: Exception: {e} {type(e)}")
             except GeneratorExit:
                 self._state_machine.on_event(ContextEvent.SHUT_DOWN)
                 raise
             except BaseException as e:
                 logfire.error(f"ContextManager: BaseException: {e} {[type(e).__name__]}")
-                # import traceback
-                # logfire.error(traceback.format_exc())
+                import traceback
+                logfire.error(traceback.format_exc())
                 if self._state_machine.state != ContextState.SHUT_DOWN:
                     self._state_machine.on_event(ContextEvent.SHUT_DOWN)
     
@@ -349,4 +351,18 @@ class RuntimeContextManager:
             return
         if managed_context.is_open:
             logfire.info(f"ContextManager: Closing context for {context_id}")
-            await managed_context.close()
+            try:
+                await managed_context.close()
+            except BaseException:
+                pass
+            # except ExceptionGroup as eg:
+            #     logfire.error("Catching ExceptionGroup @ close")
+            #     logfire.exception("ContextManager: ExceptionGroup")
+            #     for e in eg.exceptions:
+            #         print("Close Exception Group", e, type(e))
+            #         import traceback
+            #         traceback.print_exc()
+            # except Exception as e:
+            #     logfire.error(f"ContextManager: Exception: {e} {[type(e).__name__]}")
+            #     import traceback
+            #     logfire.error(traceback.format_exc())

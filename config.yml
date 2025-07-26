@@ -2,11 +2,16 @@ nexus:
   server:
     host: 0.0.0.0
     port: 8008
+    timeouts:
+      agent_context: 300
+      history_context: 120
     
   client:
     no_response_error: "Something went wrong, there is no response."
-    context_timeout: 30
-    history_context_timeout: 60
+    timeouts:
+      agent_run: 30
+      agent_context: 5
+      history_context: 60
     save_recordings: true
     wake_word:
       models:

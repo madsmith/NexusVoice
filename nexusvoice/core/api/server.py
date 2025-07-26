@@ -8,7 +8,7 @@ from pydantic_ai.messages import ModelMessage
 from nexusvoice.ai.ConversationalAgent import ConversationalAgentFactory
 from nexusvoice.ai.HomeAutomationAgent import HomeAutomationAgentFactory
 from nexusvoice.ai.LocalClassifierAgent import LocalClassifierAgentFactory
-from nexusvoice.ai.types import NexusSupportDependencies
+from nexusvoice.ai.types import NexusSupportDependencies, RequestType
 from nexusvoice.core.config import NexusConfig
 from nexusvoice.utils.RuntimeContextManager import RuntimeContextManager
 
@@ -49,9 +49,9 @@ class NexusAPIServer():
 
         self._mcp_servers: dict[str, MCPServer] = {}
         
-        self._classifier_agent: Agent | None = None
-        self._home_agent: Agent | None = None
-        self._conversational_agent: Agent | None = None
+        self._classifier_agent: Agent[NexusSupportDependencies, RequestType] | None = None
+        self._home_agent: Agent[NexusSupportDependencies, RequestType] | None = None
+        self._conversational_agent: Agent[NexusSupportDependencies, RequestType] | None = None
 
         self._support_deps: NexusSupportDependencies | None = None
 
@@ -64,13 +64,16 @@ class NexusAPIServer():
         factory = MCPConfigFactory()
         for server_config in mcp_configs:
             name = server_config["name"]
-            self._mcp_servers[name] = factory.create(server_config)
+            mcp_server = factory.create(server_config)
+            if mcp_server is None:
+                raise ValueError(f"Failed to create MCP server for {name}")
+            self._mcp_servers[name] = mcp_server
 
         # Add context for agents
         self._context_manager.add_context(
-            "agent",
+            "agent-context",
             self.nexus_online_api_context,
-            self._config.get("nexus.server.agent_context_timeout", 300)
+            self._config.get("nexus.server.timeouts.agent_context", 300)
         )
 
         self._support_deps = NexusSupportDependencies(
@@ -117,7 +120,7 @@ class NexusAPIServer():
         self._context_manager.add_context(
             f"history-{client_id}",
             history_provider,
-            self._config.get("nexus.server.history_context_timeout", 60)
+            self._config.get("nexus.server.timeouts.history_context", 60)
         )
 
         self._client_ids.append(client_id)
@@ -136,7 +139,7 @@ class NexusAPIServer():
         self._check_client(client_id)
 
         history_context_id = f"history-{client_id}"
-        client_context_ids = ["agent", history_context_id]
+        client_context_ids = ["agent-context", history_context_id]
 
         await self._context_manager.open(client_context_ids)
 
@@ -149,11 +152,18 @@ class NexusAPIServer():
         history = history_context.agent_history
         print(history)
 
-        result = await self._conversational_agent.run(
-            prompt,
-            message_history=history,
-            deps=self._support_deps
-        )
+        try:
+            assert self._support_deps is not None, "Support dependencies not initialized"
+            assert self._conversational_agent is not None, "Conversational agent not initialized"
+            support_deps = self._support_deps
+            result = await self._conversational_agent.run(
+                prompt,
+                message_history=history,
+                deps=support_deps
+            )
+        except BaseException as e:
+            logfire.exception("Exception in prompt_agent")
+            raise e
 
         history_context.agent_history = result.all_messages()
 

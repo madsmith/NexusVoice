@@ -1,3 +1,4 @@
+import anyio
 import asyncio
 from contextlib import AsyncExitStack
 import logfire
@@ -5,7 +6,7 @@ import shlex
 from typing import Optional
 from nexusvoice.core.api.base import NexusHistoryContext
 from pydantic_ai import Agent, RunContext
-from pydantic_ai.messages import ModelMessage
+from pydantic_ai.messages import ModelMessage, TextPart
 
 from nexusvoice.ai.ConversationalAgent import ConversationalAgentFactory
 from nexusvoice.ai.HomeAutomationAgent import HomeAutomationAgentFactory
@@ -22,6 +23,7 @@ from nexusvoice.core.config import NexusConfig
 from nexusvoice.utils.logging import get_logger
 from nexusvoice.utils.debug import DebugContext
 from pydantic_ai.mcp import MCPServer, MCPServerStdio
+from pydantic_ai.models import ModelResponse
 
 logger = get_logger(__name__)
 
@@ -107,9 +109,9 @@ class NexusAPIOnline(NexusAPI):
 
         self._mcp_servers: dict[str, MCPServer] = {}
 
-        self._classifier_agent: Agent | None = None
-        self._home_agent: Agent | None = None
-        self._conversational_agent: Agent | None = None
+        self._classifier_agent: Agent[NexusSupportDependencies, RequestType] | None = None
+        self._home_agent: Agent[NexusSupportDependencies, HomeAutomationResponseStruct] | None = None
+        self._conversational_agent: Agent[NexusSupportDependencies, ConversationResponse] | None = None
 
         self._context: Optional[NexusOnlineAPIContext] = None
         self._history_context: Optional[NexusOnlineHistoryContext] = None
@@ -124,7 +126,7 @@ class NexusAPIOnline(NexusAPI):
 
         self._deps.servers = self._mcp_servers
 
-        self._classifier_agent = LocalClassifierAgentFactory.create(self._deps)
+        self._classifier_agent: Agent[NexusSupportDependencies, RequestType] = LocalClassifierAgentFactory.create(self._deps)
         self._home_agent = HomeAutomationAgentFactory.create(self._deps)
         self._conversational_agent = ConversationalAgentFactory.create(self._deps)
 
@@ -138,7 +140,10 @@ class NexusAPIOnline(NexusAPI):
         server_configs = self.config.get("mcp-server-configs", [])
         for server_config in server_configs:
             name = server_config["name"]
-            self._mcp_servers[name] = factory.create(server_config)
+            mcp_server = factory.create(server_config)
+            if mcp_server is None:
+                raise ValueError(f"Failed to create MCP server for {name}")
+            self._mcp_servers[name] = mcp_server
 
     async def create_api_context(self) -> NexusOnlineAPIContext:
         """
@@ -229,29 +234,47 @@ class NexusAPIOnline(NexusAPI):
             )
 
     @logfire.instrument("Process Home Automation")
-    async def _process_home_automation(self, text: str) -> str | None:
+    async def _process_home_automation(self, text: str) -> str:
         logger.debug("Processing home automation request...")
         try:
-            result = await self.home_agent.run(text, deps=self._deps)
+            with logfire.span("Home automation agent run"):
+                with anyio.fail_after(float(self.config.get("nexus.client.timeouts.agent_run", 30))):
+                    result = await self.home_agent.run(text, deps=self._deps)
             
             message = HomeAutomationResponseStruct.extract_message(result.output)
             return message
+        except TimeoutError:
+            return "The previous request took too long to process and was cancelled."
         except Exception as e:
             logger.debug(f"Home automation processing failed: {e}")
             
-        return None
+        return "The previous request resulted in an unexpected error."
 
     @logfire.instrument("Process Conversational")
     async def _process_conversational(self, text: str) -> str:
         logger.debug("Processing conversational request...")
         message_history = self.history_context.agent_history
 
-        result = await self.conversational_agent.run(
-            text,
-            message_history=message_history,
-            deps=self._deps)
+        try:
+            with logfire.span("Conversational agent run"):
+                with anyio.fail_after(float(self.config.get("nexus.client.timeouts.agent_run", 30))):
+                    result = await self.conversational_agent.run(
+                        text,
+                        message_history=message_history,
+                        deps=self._deps)
+    
+            # Update the agent history
+            self.history_context.agent_history = result.all_messages()
 
-        # Update the agent history
-        self.history_context.agent_history = result.all_messages()
+            return result.output.text
+        except (TimeoutError, anyio.ClosedResourceError):
+            return "The previous request took too long to process and was cancelled."
+        except BaseException as e:
+            logger.exception("Exception in process_conversational")
+            self.history_context.agent_history.append(
+                ModelResponse(
+                    parts = [TextPart(content="The previous request resulted in an unexpected error.")]
+                )
+            )
+            return "I'm sorry, I was unable to process your request."
 
-        return result.output.text
