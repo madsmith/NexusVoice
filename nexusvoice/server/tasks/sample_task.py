@@ -17,7 +17,7 @@ class SampleTask(NexusTask):
         self.running = True
         count = 1
         while self.running:
-            await self.server.broadcast(f"Hello from SampleTask {count}")
+            # await self.server.broadcast(f"Hello from SampleTask {count}")
             count += 1
             await asyncio.sleep(30)
 
