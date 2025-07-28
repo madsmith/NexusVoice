@@ -13,6 +13,7 @@ from prompt_toolkit.completion import Completion
 from prompt_toolkit.document import Document
 from prompt_toolkit.completion import Completer
 from prompt_toolkit.completion import CompleteEvent
+from prompt_toolkit.patch_stdout import patch_stdout
 from typing import Iterable
 
 from nexusvoice.bootstrap import get_logfire
@@ -52,7 +53,7 @@ class REPLClient:
         self.history = FileHistory(history_path)
         self.prompt = PromptSession[str](history=self.history)
 
-        self.command_map = {}
+        self.command_map: dict[str, CommandInfo] = {}
 
     async def initialize_commands(self):
         """
@@ -75,72 +76,75 @@ class REPLClient:
         await self.connection.connect()
         
         await self.initialize_commands()
+
+        self.connection.subscribe("server_message", self._handle_server_message)
         
-        while self.running:
-            # Check if we're connected (for reconnection after a disconnect)
-            if not self.connection.connected and show_connect_prompt:
+        with patch_stdout():
+            while self.running:
+                # Check if we're connected (for reconnection after a disconnect)
+                if not self.connection.connected and show_connect_prompt:
+                    try:
+                        show_connect_prompt = False
+                        choice = await self.prompt.prompt_async("Not connected to server. Connect now? (y/n): ")
+                        choice = choice.strip().lower()
+                        if choice == 'y':
+                            if not await self.connection.connect():
+                                continue
+                        else:
+                            print("You can still use local commands. Type 'connect' to connect later.")
+                    except (KeyboardInterrupt, EOFError):
+                        print("\nExiting...")
+                        self.running = False
+                        break
+                
+                # Get command input
                 try:
-                    show_connect_prompt = False
-                    choice = await self.prompt.prompt_async("Not connected to server. Connect now? (y/n): ")
-                    choice = choice.strip().lower()
-                    if choice == 'y':
-                        if not await self.connection.connect():
-                            continue
-                    else:
-                        print("You can still use local commands. Type 'connect' to connect later.")
-                except (KeyboardInterrupt, EOFError):
+                    cmd = await self._command_prompt()
+                    cmd = cmd.strip()
+                except KeyboardInterrupt:
+                    continue
+                except EOFError:
                     print("\nExiting...")
                     self.running = False
                     break
-            
-            # Get command input
-            try:
-                cmd = await self._command_prompt()
-                cmd = cmd.strip()
-            except KeyboardInterrupt:
-                continue
-            except EOFError:
-                print("\nExiting...")
-                self.running = False
-                break
-            
-            if not cmd:
-                continue
                 
-            # Process basic commands
-            cmd_parts = cmd.split()
-            cmd_name = cmd_parts[0].lower()
-            
-            if cmd_name == 'exit' or cmd_name == 'quit':
-                print("Exiting...")
-                break
+                if not cmd:
+                    continue
+                    
+                # Process basic commands
+                cmd_parts = cmd.split()
+                cmd_name = cmd_parts[0].lower()
                 
-            elif cmd_name == 'help':
-                self.print_help()
+                if cmd_name == 'exit' or cmd_name == 'quit':
+                    print("Exiting...")
+                    break
+                    
+                elif cmd_name == 'help':
+                    self.print_help()
+                    
+                elif cmd_name == 'connect':
+                    await self.connection.connect()
+                    
+                elif cmd_name == 'disconnect':
+                    await self.connection.disconnect()
+                    
+                elif cmd_name == 'status':
+                    print(f"Connected: {self.connection.connected}")
+                    print(f"Server address: {self.connection.host}:{self.connection.port}")
                 
-            elif cmd_name == 'connect':
-                await self.connection.connect()
+                elif cmd_name == 'list':
+                    self._list_commands()
                 
-            elif cmd_name == 'disconnect':
-                await self.connection.disconnect()
-                
-            elif cmd_name == 'status':
-                print(f"Connected: {self.connection.connected}")
-                print(f"Server address: {self.connection.host}:{self.connection.port}")
-            
-            elif cmd_name == 'list':
-                self._list_commands()
-            
-            elif await self._process_server_command(cmd):
-                continue
+                elif await self._process_server_command(cmd):
+                    continue
 
-            else:
-                print(f"Unknown command: {cmd_name}")
-                print("Type 'help' for available commands")
-        
-        # Clean up when exiting
-        if self.connection.connected:
-            await self.connection.disconnect()
+                else:
+                    print(f"Unknown command: {cmd_name}")
+                    print("Type 'help' for available commands")
+            
+            # Clean up when exiting
+            if self.connection.connected:
+                await self.connection.disconnect()
     
     async def stop(self):
         self.running = False
@@ -220,6 +224,9 @@ class REPLClient:
                     print(f"  {name:<{column_widths[0]}} {params:<{column_widths[1]}} - {description:<{column_widths[2]}}")
     
         print()
+
+    def _handle_server_message(self, message: str):
+        print(f"\r[Server message] {message}")
     
     def print_help(self):
         """Print help information"""

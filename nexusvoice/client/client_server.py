@@ -35,7 +35,7 @@ class NexusClientServer(NexusClientBase):
     async def initialize(self, voice_client: NexusVoiceClient):
         self._voice_client = voice_client
 
-        self._connection.subscribe("broadcast", self._process_broadcast)
+        self._connection.subscribe("server_message", self._process_server_message)
 
     async def start(self):
         with logfire.span("Connection Lifecycle"):
@@ -58,5 +58,5 @@ class NexusClientServer(NexusClientBase):
             logger.error(traceback.format_exc())
             return ""
 
-    async def _process_broadcast(self, msg: str):
+    async def _process_server_message(self, msg: str):
         await self.voice_client.speak_response(msg)

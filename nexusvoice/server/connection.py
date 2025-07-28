@@ -163,9 +163,9 @@ class NexusConnection:
             await self._process_response(msg)
         elif isinstance(msg, ServerMessage):
             response_msg = msg.message
-            logfire.debug(f"Broadcast: {response_msg}")
-            # Emit event for broadcast messages
-            await self._event_bus.emit('broadcast', msg.message)
+            logfire.debug(f"Server Message: {response_msg}")
+            # Emit event for server messages
+            await self._event_bus.emit('server_message', msg.message)
         else:
             warning_msg = f"Unhandled message type: [{type(msg)}] {msg}"
             logfire.warning(warning_msg)
