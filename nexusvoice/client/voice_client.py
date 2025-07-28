@@ -32,7 +32,7 @@ from nexusvoice.client.commands import (
     CommandProcessText
 )
 
-from nexusvoice.client.client import NexusClientBase
+from nexusvoice.client.client import NexusClientProtocol
 from nexusvoice.client.RecordingState import RecordingState, RecEvent, RecState
 
 logger = get_logger(__name__)
@@ -56,7 +56,7 @@ INFERENCE_FRAMEWORK = "onnx"
 ACTIVATION_THRESHOLD = 0.5
 
 class NexusVoiceClient:
-    def __init__(self, client_id: str, config: NexusConfig, client: "NexusClientProtocol"):
+    def __init__(self, client_id: str, config: NexusConfig, client: NexusClientProtocol):
         self.name = f"{self.__class__.__name__}::{client_id}"
         self.daemon = True
 
