@@ -207,15 +207,18 @@ class REPLClient:
         if not self.command_map:
             print("  No commands available. Server may not be connected.")
         else:
-            max_name_len = max(len(name) for name in self.command_map.keys())
+            columns = []
             for name, cmd_info in sorted(self.command_map.items()):
                 params = ", ".join(cmd_info.parameters.keys()) if cmd_info.parameters else ""
                 if params:
-                    print(f"  {name:<{max_name_len}} [{params}] - {cmd_info.description}")
-                elif cmd_info.description:
-                    print(f"  {name:<{max_name_len}} - {cmd_info.description}")
-                else:
-                    print(f"  {name:}")
+                    params = f"[{params}]"
+                columns.append((name, params, cmd_info.description))
+
+            if columns:
+                column_widths = [max(len(col[i]) for col in columns) for i in range(len(columns[0]))]
+                for name, params, description in columns:
+                    print(f"  {name:<{column_widths[0]}} {params:<{column_widths[1]}} - {description:<{column_widths[2]}}")
+    
         print()
     
     def print_help(self):
