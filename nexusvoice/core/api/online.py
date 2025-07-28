@@ -126,7 +126,7 @@ class NexusAPIOnline(NexusAPI):
 
         self._deps.servers = self._mcp_servers
 
-        self._classifier_agent: Agent[NexusSupportDependencies, RequestType] = LocalClassifierAgentFactory.create(self._deps)
+        self._classifier_agent = LocalClassifierAgentFactory.create(self._deps)
         self._home_agent = HomeAutomationAgentFactory.create(self._deps)
         self._conversational_agent = ConversationalAgentFactory.create(self._deps)
 
