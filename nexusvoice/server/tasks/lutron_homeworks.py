@@ -101,7 +101,8 @@ class LutronHomeworks(NexusTask):
             self.running = True
             count = 1
             while self.running:
-                await self.server.broadcast(f"Hello from Lutron Homeworks {count}")
+                # TODO: figure out what lutron_homeworks should do while running if anything
+                # await self.server.broadcast(f"Hello from Lutron Homeworks {count}")
                 count += 1
                 await asyncio.sleep(60)
         except Exception as e:
