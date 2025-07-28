@@ -1,8 +1,8 @@
 import asyncio
 from typing import Any, Awaitable, Callable, Dict, List, NamedTuple, Union
 
-type EventT = str
-type CallbackT = Callable[[Any], Union[Any, Awaitable[Any]]]
+EventT = str
+CallbackT = Callable[[Any], Union[Any, Awaitable[Any]]]
 
 class SubscriptionToken:
     def __init__(self, event: EventT, nonce: int):

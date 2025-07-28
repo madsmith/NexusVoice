@@ -22,7 +22,7 @@ from .types import (
 
 message_adapter = TypeAdapter(ClientInboundMessage)
 
-type CallbackT = Callable[[Any], Union[Any, Awaitable[Any]]]
+CallbackT = Callable[[Any], Union[Any, Awaitable[Any]]]
 
 class NexusServerServices(Protocol):
     """
