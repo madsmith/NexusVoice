@@ -63,8 +63,8 @@ class CallResponseError(CallResponse):
     error: str
     details: dict = Field(default_factory=dict)
 
-class BroadcastMessage(BaseModel):
-    msg_type: Literal["broadcast"] = "broadcast"
+class ServerMessage(BaseModel):
+    msg_type: Literal["server_message"] = "server_message"
     message: str
 
 class CommandParameterInfo(BaseModel):
@@ -92,7 +92,7 @@ ClientInboundMessage = Annotated[
     Union[
         CallResponseSuccess,
         CallResponseError,
-        BroadcastMessage,
+        ServerMessage,
         CommandListResponse
     ],
     Field(discriminator="msg_type")

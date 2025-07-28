@@ -14,7 +14,7 @@ from .types import (
     CallResponse,
     CallResponseSuccess,
     CallResponseError,
-    BroadcastMessage,
+    ServerMessage,
     ClientInboundMessage,
     CommandInfo,
     CommandListResponse,
@@ -161,9 +161,9 @@ class NexusConnection:
 
         if isinstance(msg, CallResponse):  # Use parent class directly for type checking
             await self._process_response(msg)
-        elif isinstance(msg, BroadcastMessage):
+        elif isinstance(msg, ServerMessage):
             response_msg = msg.message
-            logfire.info(f"Broadcast: {response_msg}")
+            logfire.debug(f"Broadcast: {response_msg}")
             # Emit event for broadcast messages
             await self._event_bus.emit('broadcast', msg.message)
         else:

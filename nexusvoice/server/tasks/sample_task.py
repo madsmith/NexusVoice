@@ -2,7 +2,6 @@ import asyncio
 import logfire
 
 from nexusvoice.server.NexusServer import NexusServer
-from nexusvoice.server.types import BroadcastMessage
 from nexusvoice.server.tasks.base import NexusTask
 from nexusvoice.core.config import NexusConfig
 
@@ -18,7 +17,7 @@ class SampleTask(NexusTask):
         self.running = True
         count = 1
         while self.running:
-            await self.server.broadcast(BroadcastMessage(message=f"Hello from SampleTask {count}"))
+            await self.server.broadcast(f"Hello from SampleTask {count}")
             count += 1
             await asyncio.sleep(30)
 

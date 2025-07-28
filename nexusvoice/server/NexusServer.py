@@ -8,7 +8,7 @@ from pydantic import ValidationError
 from pydantic.type_adapter import TypeAdapter
 
 from .types import (
-    BroadcastMessage,
+    ServerMessage,
     CallRequest,
     CallResponse,
     CallResponseError,
@@ -370,7 +370,7 @@ class NexusServer:
         return args
     
     @logfire.instrument("Send Response")
-    async def _send_response(self, writer: asyncio.StreamWriter, response: CallResponse | BroadcastMessage):
+    async def _send_response(self, writer: asyncio.StreamWriter, response: CallResponse | ServerMessage):
         try:
             response_data = response.model_dump_json().encode() + b'\n'
             writer.write(response_data)
@@ -408,14 +408,34 @@ class NexusServer:
         # defer queue a broadcast message in 2 seconds
         async def do_broadcast():
             await asyncio.sleep(4)
-            await self.broadcast(BroadcastMessage(message="Hello from NexusServer"))
+            await self.broadcast("Hello from NexusServer")
 
         asyncio.create_task(do_broadcast())
         
         return "ok"
     
-    async def broadcast(self, message: BroadcastMessage):
-        """Broadcast a message to all connected clients"""
+    async def broadcast(self, message: str) -> None:
+        """
+        Broadcast a message to all connected clients
+
+        Args:
+            message: The message to broadcast
+        """
         async with self.lock:
             for client_id, writer in self.clients.items():
-                asyncio.create_task(self._send_response(writer, message))
+                response = ServerMessage(message=message)
+                asyncio.create_task(self._send_response(writer, response))
+    
+    async def notify(self, client_id: str, message: str) -> None:
+        """
+        Notify a specific client
+
+        Args:
+            client_id: The ID of the client to notify
+            message: The message to notify
+        """
+        async with self.lock:
+            if client_id in self.clients:
+                writer = self.clients[client_id]
+                response = ServerMessage(message=message)
+                asyncio.create_task(self._send_response(writer, response))

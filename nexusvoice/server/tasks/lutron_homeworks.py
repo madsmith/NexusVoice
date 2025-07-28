@@ -8,7 +8,6 @@ from lutron_homeworks.database.filters import FilterLibrary
 from typing import Any
 
 from nexusvoice.server.NexusServer import NexusServer
-from nexusvoice.server.types import BroadcastMessage
 from nexusvoice.server.tasks.base import NexusTask
 from nexusvoice.core.config import NexusConfig
 
@@ -102,7 +101,7 @@ class LutronHomeworks(NexusTask):
             self.running = True
             count = 1
             while self.running:
-                await self.server.broadcast(BroadcastMessage(message=f"Hello from Lutron Homeworks {count}"))
+                await self.server.broadcast(f"Hello from Lutron Homeworks {count}")
                 count += 1
                 await asyncio.sleep(60)
         except Exception as e:
