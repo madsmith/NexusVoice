@@ -6,7 +6,7 @@ from nexusvoice.server.tasks.base import NexusTask
 from nexusvoice.core.config import NexusConfig
 
 class SampleTask(NexusTask):
-    def __init__(self, server: "NexusServer", config: NexusConfig):
+    def __init__(self, server: NexusServer, config: NexusConfig):
         super().__init__(server, config)
 
     def register(self):

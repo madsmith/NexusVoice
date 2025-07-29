@@ -8,7 +8,7 @@ from nexusvoice.core.config import NexusConfig
 from nexusvoice.core.api.server import NexusAPIServer
 
 class AIAgent(NexusTask):
-    def __init__(self, server: "NexusServer", config: NexusConfig):
+    def __init__(self, server: NexusServer, config: NexusConfig):
         super().__init__(server, config)
         self._api = NexusAPIServer(config)
 

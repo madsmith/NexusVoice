@@ -20,7 +20,7 @@ class Scheduler(NexusTask, EventSchedulerService):
         "event-scheduler": EventSchedulerService 
     }
 
-    def __init__(self, server: "NexusServer", config: NexusConfig):
+    def __init__(self, server: NexusServer, config: NexusConfig):
         super().__init__(server, config)
         self._scheduled_events: dict[ScheduleEventIdT, ScheduledEvent] = {}
 
