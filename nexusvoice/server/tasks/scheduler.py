@@ -72,7 +72,7 @@ class Scheduler(NexusTask, EventSchedulerService):
                 for event_id in list(self._scheduled_events.keys()):
                     event = self._scheduled_events[event_id]
                     time_fmt = event.event_time.strftime("%Y-%m-%d %H:%M:%S")
-                    logfire.debug(f"Processing event {event_id} at {time_fmt}")
+                    logfire.trace(f"Processing event {event_id} at {time_fmt}")
                     if event.event_time <= now:
                         # Get task for invoking the callback
                         if asyncio.iscoroutinefunction(event.callback):
