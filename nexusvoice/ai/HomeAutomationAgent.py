@@ -41,5 +41,5 @@ class HomeAutomationAgentFactory:
             retries=config.get("agents.home_automation.retries", 1),
             deps_type=NexusSupportDependencies,
             output_type=HomeAutomationResponseStruct,
-            mcp_servers=servers
+            toolsets=servers
         )

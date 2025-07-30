@@ -37,5 +37,5 @@ class ConversationalAgentFactory:
             retries=config.get("agents.conversational.retries", 1),
             deps_type=NexusSupportDependencies,
             output_type=ConversationResponse,
-            mcp_servers=servers
+            toolsets=servers
         )
