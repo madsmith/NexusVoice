@@ -53,6 +53,11 @@ class Scheduler(NexusTask, EventSchedulerService):
             },
             description="Schedule a broadcast to be sent after a delay"
         )
+    
+    async def _create_provided_services(self):
+        return {
+            "event-scheduler": self
+        }    
 
     async def start(self):
         """Run the task"""
