@@ -151,21 +151,55 @@ class NexusServer:
 
         # Initialize tasks
         with logfire.span("Initializing tasks"):
-            initialized_tasks = []
+            providing_tasks = []
+            remaining_tasks = []
             for task in self.tasks:
-                try:
-                    with logfire.span(f"Initializing task: {task.__class__.__name__}"):
-                        success = await task.initialize()
-                        if success:
-                            initialized_tasks.append(task)
-                        else:
-                            logfire.error(f"Task {task.__class__.__name__} failed to initialize")
-                except Exception as e:
-                    logfire.error(f"Error initializing task {task.__class__.__name__}: {e}")
+                if task.provided_services:
+                    providing_tasks.append(task)
+                else:
+                    remaining_tasks.append(task)
+            
+            initialized_tasks = []
+            
+            # Initialize providers first
+            if providing_tasks:
+                provider_results = await asyncio.gather(
+                    *[self._initialize_task(task) for task in providing_tasks]
+                )
+
+                # Check results and remove failed tasks
+                for i, (success, task) in enumerate(zip(provider_results, providing_tasks)):
+                    if success:
+                        initialized_tasks.append(task)
+            
+            # Initialize remaining tasks
+            if remaining_tasks:
+                remaining_results = await asyncio.gather(
+                    *[self._initialize_task(task) for task in remaining_tasks]
+                )
+
+                # Check results and remove failed tasks
+                for i, (success, task) in enumerate(zip(remaining_results, remaining_tasks)):
+                    if success:
+                        initialized_tasks.append(task)
             
             # Replace tasks list with only successfully initialized tasks
             self.tasks = initialized_tasks
-                
+    
+    async def _initialize_task(self, task: NexusTask) -> bool:
+        """Initialize a single task"""
+        try:
+            with logfire.span(f"Initializing task: {task.__class__.__name__}"):
+                success = await task.initialize()
+                if success:
+                    return True
+                else:
+                    logfire.error(f"Task {task.__class__.__name__} failed to initialize")
+        except BaseException as e:
+            logfire.error(f"Error initializing task {task.__class__.__name__}: {e}")
+
+        return False
+    
     async def _stop_tasks(self):
         """Stop all running tasks"""
         for task in self.tasks:
@@ -179,13 +213,17 @@ class NexusServer:
     async def _main_loop(self):
         """Main server loop"""
         # Start task coroutines but don't await them yet
-        task_coros = [task.start() for task in self.tasks]
+        # task_coros = [task.start() for task in self.tasks]
         tasks = []
         
         try:
             # Start all tasks
-            for coro in task_coros:
-                tasks.append(asyncio.create_task(coro))
+            with logfire.span("Starting tasks"):
+                # for coro in task_coros:
+                #     tasks.append(asyncio.create_task(coro))
+                for task in self.tasks:
+                    with logfire.span(f"Starting task: {task.name}"):
+                        tasks.append(asyncio.create_task(task.start()))
                 
             # Keep the server running until it is cancelled
             await asyncio.Future()
