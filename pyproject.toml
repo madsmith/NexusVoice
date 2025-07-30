@@ -10,7 +10,7 @@ dependencies = [
     "datasets==3.5.0",
     "fastmcp>=2.9.2",
     "kokoro>=0.9.4",
-    "logfire[httpx,requests]>=3.17.0",
+    "logfire[httpx,requests]>=4.0.0",
     "lutron-homeworks @ git+https://github.com/madsmith/lutron-homeworks.git@v0.4.2",
     "numpy~=2.2",
     "omegaconf>=2.3",
