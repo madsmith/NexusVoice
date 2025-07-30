@@ -97,7 +97,8 @@ class ServiceRegistry:
             descriptor.subscribers.add(subscriber_name)
         
         return cast(T, descriptor.instance)
-            
+    
+    @logfire.instrument("Get Service (Future)")
     async def get_service_future(self, service_id: str, expected_type: Type[T],
                               subscriber_name: str | None = None) -> asyncio.Future[T]:
         """
@@ -123,7 +124,6 @@ class ServiceRegistry:
             
             return pending_future
     
-    @logfire.instrument("Waiting for service")
     async def wait_for_service(
         self,
         service_id: str,
@@ -134,24 +134,24 @@ class ServiceRegistry:
         """
         Wait for a service to become available
         """
-        # Get a future for the service
-        logfire.trace(f"Getting service future for {service_id}")
-        future = await self.get_service_future(service_id, expected_type, subscriber_name)
-        logfire.trace(f"Service future for {service_id} created")
-        
-        try:
-            # Wait for the future to complete with an optional timeout
-            logfire.trace(f"Waiting for service {service_id} to become available with timeout {timeout}")
-            result = await asyncio.wait_for(future, timeout)
-            logfire.trace(f"Service {service_id} became available")
-            return result
-        except asyncio.TimeoutError:
-            # Remove the future from the pending futures
-            logfire.warning(f"Service {service_id} not available after {timeout}s")
-            async with self._lock:
-                if service_id in self._pending_futures and future in self._pending_futures[service_id]:
-                    self._pending_futures[service_id].remove(future)
-                    if not self._pending_futures[service_id]:
-                        del self._pending_futures[service_id]
+        with logfire.span(f"Waiting for service: {service_id}"):
+            # Get a future for the service
+            logfire.trace(f"Getting service future for {service_id}")
+            future = await self.get_service_future(service_id, expected_type, subscriber_name)
             
-            raise TimeoutError(f"Service {service_id} not available after {timeout}s")
+            try:
+                # Wait for the future to complete with an optional timeout
+                logfire.trace(f"Waiting for service {service_id} to become available with timeout {timeout}")
+                result = await asyncio.wait_for(future, timeout)
+                logfire.trace(f"Service {service_id} became available")
+                return result
+            except asyncio.TimeoutError:
+                # Remove the future from the pending futures
+                logfire.warning(f"Service {service_id} not available after {timeout}s")
+                async with self._lock:
+                    if service_id in self._pending_futures and future in self._pending_futures[service_id]:
+                        self._pending_futures[service_id].remove(future)
+                        if not self._pending_futures[service_id]:
+                            del self._pending_futures[service_id]
+                
+                raise TimeoutError(f"Service {service_id} not available after {timeout}s")
