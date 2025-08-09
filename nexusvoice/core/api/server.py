@@ -8,7 +8,12 @@ from pydantic_ai.messages import ModelMessage
 from nexusvoice.ai.ConversationalAgent import ConversationalAgentFactory
 from nexusvoice.ai.HomeAutomationAgent import HomeAutomationAgentFactory
 from nexusvoice.ai.LocalClassifierAgent import LocalClassifierAgentFactory
-from nexusvoice.ai.types import NexusSupportDependencies, RequestType
+from nexusvoice.ai.types import (
+    ConversationResponse,
+    HomeAutomationResponseStruct,
+    NexusSupportDependencies,
+    RequestType
+)
 from nexusvoice.core.config import NexusConfig
 from nexusvoice.utils.RuntimeContextManager import RuntimeContextManager
 
@@ -50,8 +55,8 @@ class NexusAPIServer():
         self._mcp_servers: dict[str, MCPServer] = {}
         
         self._classifier_agent: Agent[NexusSupportDependencies, RequestType] | None = None
-        self._home_agent: Agent[NexusSupportDependencies, RequestType] | None = None
-        self._conversational_agent: Agent[NexusSupportDependencies, RequestType] | None = None
+        self._home_agent: Agent[NexusSupportDependencies, HomeAutomationResponseStruct] | None = None
+        self._conversational_agent: Agent[NexusSupportDependencies, ConversationResponse] | None = None
 
         self._support_deps: NexusSupportDependencies | None = None
 
@@ -146,6 +151,7 @@ class NexusAPIServer():
         logfire.info(f"Prompting agent: {prompt}")
 
         history_context = self._context_manager.get_context(history_context_id)
+        # TODO: remove
         print(history_context)
         assert isinstance(history_context, NexusServerHistoryContext)
 
