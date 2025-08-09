@@ -1,12 +1,11 @@
 from ast import TypeVar
 import asyncio
-from dataclasses import dataclass
 from enum import Enum, auto
-import traceback
 import logfire
-from typing import Any, Awaitable, Callable, Generic, TypeVar, Union, cast
+from typing import Any, Awaitable, Callable, Generic, TypeAlias, TypeVar, cast
+from contextlib import AbstractAsyncContextManager
 
-from nexusvoice.core.api.base import AsyncContext, NexusAPIContext
+from nexusvoice.core.api.base import AsyncContext
 from nexusvoice.utils.state import StateMachine
 from nexusvoice.utils.debug import AsyncRateLimiter
 
@@ -48,12 +47,14 @@ class ContextManagerStateMachine(StateMachine):
 
 T = TypeVar("T")
 
+ContextLike: TypeAlias = AsyncContext[T] | AbstractAsyncContextManager[T]
+
+ContextProviderT = Callable[[], ContextLike[T]] | Callable[[], Awaitable[ContextLike[T]]]
+
 class ManagedContext(Generic[T]):
     def __init__(
         self,
-        context_provider: 
-            Callable[[], AsyncContext[T]] | 
-            Callable[[], Awaitable[AsyncContext[T]]],
+        context_provider: ContextProviderT,
         timeout: float
     ):
         self._context: AsyncContext[T] | None = None
@@ -151,7 +152,7 @@ class RuntimeContextManager:
     def add_context(
         self,
         context_id: str,
-        context_provider: Callable[[], AsyncContext] | Callable[[], Awaitable[AsyncContext]],
+        context_provider: ContextProviderT,
         timeout: float
     ):
         self._contexts[context_id] = ManagedContext(
@@ -316,7 +317,7 @@ class RuntimeContextManager:
     async def _open_contexts(self, context_ids: list[str]):
         # Default to all context ids if none specified
         if len(context_ids) == 0:
-            context_ids = self._contexts.keys()
+            context_ids = list(self._contexts.keys())
 
         for context_id in context_ids:
             managed_context = self._contexts.get(context_id)
@@ -333,7 +334,7 @@ class RuntimeContextManager:
     async def _close_contexts(self, context_ids: list[str]):
         # Default to all context ids if none specified
         if len(context_ids) == 0:
-            context_ids = self._contexts.keys()
+            context_ids = list(self._contexts.keys())
         
         for context_id in context_ids:
             managed_context = self._contexts.get(context_id)
