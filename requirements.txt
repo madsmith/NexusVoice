@@ -1,18 +1,20 @@
 accelerate==1.6.0
+anyio>=4.9.0
 datasets==3.5.0
+discord>=2.3.2
 fastmcp>=2.9.2
 kokoro>=0.9.4
-logfire[httpx,requests]>=3.17.0
-lutron-homeworks @ git+https://github.com/madsmith/lutron-homeworks.git@v0.4.0
+logfire[httpx,requests]>=4.0.0
+lutron-homeworks @ git+https://github.com/madsmith/lutron-homeworks.git@v0.5.1
 numpy~=2.2
 omegaconf>=2.3
-openai~=1.65
+openai==1.92.0
 opentelemetry-instrumentation-requests>=0.54b1
 openwakeword==0.6.0
 prompt-toolkit>=3.0.51
 pyaudio~=0.2
-pydantic-ai>=0.2.11
-pydantic>=2.11.2
+pydantic-ai>=0.6.2
+pydantic>=2.11.7
 pydub~=0.25
 requests>=2.32.3
 setuptools
