@@ -187,7 +187,7 @@ class NexusConnection:
         self,
         command: str,
         payload: dict[str, Any] | None = None,
-        timeout: float = 10.0
+        timeout: float | None = 60.0
     ) -> Any:
         """
         Send a command to the server without waiting for a response
