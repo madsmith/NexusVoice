@@ -93,6 +93,8 @@ class NexusDiscordBot():
         logger.info(f'Logged in as {self._bot.user} (ID: {self._bot.user.id})')
 
     async def _on_message(self, message: discord.Message):
+        is_bot_message = self._bot.user and message.author.id == self._bot.user.id
+        
         # Log every message the bot sees
         if message.guild:  # Message is from a server
             channel_name = message.channel.name if isinstance(message.channel, discord.TextChannel) else "DM"
@@ -101,22 +103,22 @@ class NexusDiscordBot():
             print(f'[DM] {message.author.name}: {message.content}')
         
         # Respond if the message contains the word "test" (case insensitive)
-        if "test" in message.content.lower() and self._bot.user and message.author.id != self._bot.user.id:
+        if "test" in message.content.lower() and not is_bot_message:
             await message.channel.send("I detected a test! 👀")
             return
 
-        
-        try:
-            logger.info(f"Prompting agent: {message.content}")
-            response = await self._nexus_connection.send_command(
-                "prompt_agent", {"prompt": message.content})
-            logger.info(f"Response: {response}")
-            await message.channel.send(response)
-        except BaseException as e:
-            logger.error(f"Error sending message: {e}")
-            # Show the traceback
-            import traceback
-            logger.error(traceback.format_exc())
+        if not is_bot_message:
+            try:
+                logger.info(f"Prompting agent: {message.content}")
+                response = await self._nexus_connection.send_command(
+                    "prompt_agent", {"prompt": message.content})
+                logger.info(f"Response: {response}")
+                await message.channel.send(response)
+            except BaseException as e:
+                logger.error(f"Error sending message: {e}")
+                # Show the traceback
+                import traceback
+                logger.error(traceback.format_exc())
         
         # Don't forget to process commands, or your commands won't work
         await self._bot.process_commands(message)
