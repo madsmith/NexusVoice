@@ -2,7 +2,6 @@ import argparse
 import asyncio
 import logfire
 import logging
-from omegaconf import OmegaConf
 
 from nexusvoice.bootstrap import get_logfire
 from nexusvoice.utils.logging import get_logger

@@ -2,7 +2,6 @@ import argparse
 import asyncio
 import logfire
 import logging
-from omegaconf import OmegaConf
 from socket import gethostname
 
 from nexusvoice.bootstrap import get_logfire
