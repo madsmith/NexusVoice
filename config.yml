@@ -5,7 +5,8 @@ nexus:
     timeouts:
       agent_context: 300
       history_context: 120
-    
+  bot:
+    discord_token: ${private.discord.token}
   client:
     no_response_error: "Something went wrong, there is no response."
     timeouts:

@@ -8,6 +8,7 @@ dependencies = [
     "accelerate==1.6.0",
     "anyio>=4.9.0",
     "datasets==3.5.0",
+    "discord>=2.3.2",
     "fastmcp>=2.9.2",
     "kokoro>=0.9.4",
     "logfire[httpx,requests]>=4.0.0",
@@ -35,6 +36,7 @@ dependencies = [
 [project.scripts]
 nexus-client-standalone = "nexusvoice.client.main_standalone:main"
 nexus-client = "nexusvoice.client.main_client_server:main"
+nexus-discord-bot = "nexusvoice.client.main_discord_bot:main"
 nexus-server = "nexusvoice.server.main:main"
 nexus-test-client = "nexusvoice.server.test_client:main"
 
