@@ -18,8 +18,8 @@ from typing import Iterable
 
 from nexusvoice.bootstrap import get_logfire
 
-from .connection import NexusConnection
-from .types import CommandInfo
+from nexusvoice.server.connection import NexusConnection
+from nexusvoice.server.types import CommandInfo
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +77,7 @@ class REPLClient:
         
         await self.initialize_commands()
 
-        self.connection.subscribe("server_message", self._handle_server_message)
+        self.connection.on_server_message(self._handle_server_message)
         
         with patch_stdout():
             while self.running:

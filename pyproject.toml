@@ -38,7 +38,7 @@ nexus-client-standalone = "nexusvoice.client.main_standalone:main"
 nexus-client = "nexusvoice.client.main_client_server:main"
 nexus-discord-bot = "nexusvoice.client.main_discord_bot:main"
 nexus-server = "nexusvoice.server.main:main"
-nexus-test-client = "nexusvoice.server.test_client:main"
+nexus-repl-client = "nexusvoice.client.repl_client:main"
 
 [project.optional-dependencies]
 dev = [
