@@ -8,14 +8,15 @@ build/
 dist/
 
 # Runtime Config
-config_private.yml
+config/config_private.yaml
 
 # Runtime artifacts
 __pycache__
 *.pyc
 node_modules
 latest_silero_models.yml
-config/
+config/lutron/DbXmlInfo.xml
+config/lutron/lutron_config.db
 server.log
 logs/
 

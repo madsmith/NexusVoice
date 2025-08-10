@@ -72,8 +72,8 @@ class NexusConfig:
         return f"NexusConfig({repr(self._config)})"
 
 def load_config() -> NexusConfig:
-    config = OmegaConf.load("config.yml")
-    config_private = OmegaConf.load("config_private.yml")
+    config = OmegaConf.load("config/config.yaml")
+    config_private = OmegaConf.load("config/config_private.yaml")
     config = OmegaConf.merge(config, config_private)
 
     # Resolve any relative paths
