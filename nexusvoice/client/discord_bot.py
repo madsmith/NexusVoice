@@ -2,7 +2,6 @@ import discord
 from discord.ext import commands
 import logfire
 import logging
-from typing import TYPE_CHECKING
 
 from nexusvoice.core.config import NexusConfig
 from nexusvoice.server.connection import NexusConnection
@@ -20,9 +19,12 @@ class NexusDiscordBot():
 
         self._nexus_connection: NexusConnection = NexusConnection(self._host, self._port)
 
+        # Setup Discord Bot
         intents = discord.Intents.default()
         intents.message_content = True
         self._bot: commands.Bot = commands.Bot(command_prefix="!", intents=intents)
+
+        self._notify_users: list[discord.User | discord.Member] = []
 
     
     async def initialize(self):
@@ -30,7 +32,6 @@ class NexusDiscordBot():
         self._nexus_connection.subscribe("server_message", self._process_server_message)
 
         self._initialize_bot()
-
 
     async def start(self):
         discord_token = self.config.get("nexus.bot.discord_token")
@@ -46,23 +47,14 @@ class NexusDiscordBot():
         if self._nexus_connection.connected:
             await self._nexus_connection.disconnect()
 
-    async def process_text(self, text: str):
-        try:
-            response = await self._nexus_connection.send_command(
-                "prompt_agent", {"prompt": text})
-            return response
-        except Exception as e:
-            # TODO: Remove This - api shouldn't throw exceptions
-            logger.error(f"Error processing command: {e}")
-            # Show the traceback
-            import traceback
-            logger.error(traceback.format_exc())
-            return ""
+    async def task(self):
+        return self._nexus_connection.get_task()
 
     async def _process_server_message(self, msg: str):
         # TODO: send message to client?
         logger.info(msg)
-
+        for user in self._notify_users:
+            await user.send(msg)
 
     def _initialize_bot(self):
         self._initialize_commands()
@@ -72,6 +64,18 @@ class NexusDiscordBot():
         @self._bot.command()
         async def ping(ctx: commands.Context):
             await ctx.send("Pong!")
+
+        @self._bot.command()
+        async def subscribe(ctx: commands.Context):
+            await ctx.send("Subscribed to server messages")
+            self._notify_users.append(ctx.author)
+            print(self._notify_users)
+
+        @self._bot.command()
+        async def unsubscribe(ctx: commands.Context):
+            await ctx.send("Unsubscribed from server messages")
+            self._notify_users.remove(ctx.author)
+            print(self._notify_users)
 
     def _initialize_events(self):
         @self._bot.event
@@ -95,12 +99,6 @@ class NexusDiscordBot():
     async def _on_message(self, message: discord.Message):
         is_bot_message = self._bot.user and message.author.id == self._bot.user.id
         
-        # Log every message the bot sees
-        if message.guild:  # Message is from a server
-            channel_name = message.channel.name if isinstance(message.channel, discord.TextChannel) else "DM"
-            print(f'[{message.guild.name}] [#{channel_name}] {message.author.name}: {message.content}')
-        else:  # Direct message
-            print(f'[DM] {message.author.name}: {message.content}')
         
         # Respond if the message contains the word "test" (case insensitive)
         if "test" in message.content.lower() and not is_bot_message:
@@ -108,17 +106,36 @@ class NexusDiscordBot():
             return
 
         if not is_bot_message:
-            try:
-                logger.info(f"Prompting agent: {message.content}")
-                response = await self._nexus_connection.send_command(
-                    "prompt_agent", {"prompt": message.content})
-                logger.info(f"Response: {response}")
-                await message.channel.send(response)
-            except BaseException as e:
-                logger.error(f"Error sending message: {e}")
-                # Show the traceback
-                import traceback
-                logger.error(traceback.format_exc())
-        
-        # Don't forget to process commands, or your commands won't work
+            # Log every message the bot sees
+            if message.guild:  # Message is from a server
+                channel_name = message.channel.name if isinstance(message.channel, discord.TextChannel) else "DM"
+                print(f'[{message.guild.name}] [#{channel_name}] {message.author.name}: {message.content}')
+            else:  # Direct message
+                print(f'[DM] {message.author.name}: {message.content}')
+                if isinstance(message.author, discord.User):
+                    print(message.author, message.author.name, message.author.id)
+                elif isinstance(message.author, discord.Member):
+                    print(message.author, message.author.name, message.author.nick, message.author.id)
+                else:
+                    print(message.author, message.author.name, message.author.id)
+            
+            ctx = await self._bot.get_context(message)
+            if not ctx.valid and not ctx.command:
+                await self._prompt_agent(message)
+                return
+            
         await self._bot.process_commands(message)
+
+    async def _prompt_agent(self, message: discord.Message):
+        try:
+            logger.info(f"Prompting agent: {message.content}")
+            response = await self._nexus_connection.send_command(
+                "prompt_agent", {"prompt": message.content})
+            logger.info(f"Response: {response}")
+            await message.channel.send(response)
+        except BaseException as e:
+            logger.error(f"Error sending message: {e}")
+            # Show the traceback
+            import traceback
+            logger.error(traceback.format_exc())
+            

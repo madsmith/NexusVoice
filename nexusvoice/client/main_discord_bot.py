@@ -24,8 +24,6 @@ async def run_client(config: NexusConfig, args: argparse.Namespace):
             
             # In the future, NexusVoiceClient should support async start/stop
             await discord_bot.start()
-    except KeyboardInterrupt:
-        logger.warning(f"Exiting due to KeyboardInterrupt - run_client")
     except Exception as e:
         logger.error(e)
         import traceback
@@ -58,7 +56,8 @@ def main():
 
         asyncio.run(run_client(config, args))
     except KeyboardInterrupt:
-        logger.warning(f"UNHANDLED: Exiting due to KeyboardInterrupt")
+        logger.debug(f"Exiting due to KeyboardInterrupt")
+        pass
     except Exception as e:
         logger.error(f"UNHANDLED: {e}")
         import traceback
