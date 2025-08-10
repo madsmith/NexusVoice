@@ -7,7 +7,7 @@ from pydantic.type_adapter import TypeAdapter
 from typing import Any, Callable, Protocol, Union, Awaitable
 import uuid
 
-from nexusvoice.utils.eventbus import EventBus
+from nexusvoice.utils.eventbus import EventBus, SubscriptionToken
 
 from .types import (
     CallRequest,
@@ -23,19 +23,6 @@ from .types import (
 message_adapter = TypeAdapter(ClientInboundMessage)
 
 CallbackT = Callable[[Any], Union[Any, Awaitable[Any]]]
-
-class NexusServerServices(Protocol):
-    """
-    Protocol for NexusServer services
-    """
-    async def ping(self) -> str:
-        ...
-    
-    async def queue_broadcast(self) -> None:
-        ...
-    
-    async def prompt_agent(self, prompt: str) -> str:
-        ...
 
 class NexusConnection:
     """
@@ -114,14 +101,22 @@ class NexusConnection:
         """Get the message reading task"""
         return self.read_task
 
-    def subscribe(self, event_type: str, callback: CallbackT):
+    def subscribe(self, event_type: str, callback: CallbackT) -> SubscriptionToken:
         """Subscribe to events of a specific type with either a sync or async callback function
         
         Args:
             event_type: The type of event to subscribe to
             callback: A callback function that can be either synchronous or asynchronous
         """
-        self._event_bus.subscribe(event_type, callback)
+        return self._event_bus.subscribe(event_type, callback)
+
+    def on_server_message(self, callback: CallbackT) -> SubscriptionToken:
+        """Shorthand to subscribe to server messages"""
+        return self.subscribe("server_message", callback)
+    
+    def unsubscribe(self, token: SubscriptionToken):
+        """Unsubscribe from an event using the token returned by subscribe."""
+        self._event_bus.unsubscribe(token)
     
     async def _read_messages(self):
         """Background task to continuously read messages from the server"""
@@ -160,7 +155,7 @@ class NexusConnection:
             return
 
         if isinstance(msg, CallResponse):  # Use parent class directly for type checking
-            await self._process_response(msg)
+            await self._process_call_response(msg)
         elif isinstance(msg, ServerMessage):
             response_msg = msg.message
             logfire.debug(f"Server Message: {response_msg}")
@@ -170,7 +165,7 @@ class NexusConnection:
             warning_msg = f"Unhandled message type: [{type(msg)}] {msg}"
             logfire.warning(warning_msg)
     
-    async def _process_response(self, response: CallResponse):
+    async def _process_call_response(self, response: CallResponse):
         """
         Process a response from the server, matching the request ID to the pending call
         and setting the pending call result to the waiting future.
