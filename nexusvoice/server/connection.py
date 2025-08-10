@@ -46,7 +46,16 @@ class NexusConnection:
         self.read_task = None
     
     async def connect(self) -> bool:
-        """Connect to the NexusServer"""
+        """
+        Connect to the NexusServer.
+        
+        Returns:
+            Boolean indicating if the connection was successful
+            
+        Raises:
+            ConnectionRefusedError: If the server is not available at the specified host/port
+            OSError: If there is a network or system-level error during connection
+        """
         try:
             logfire.info(f"Connecting to server at {self.host}:{self.port}...")
             self.reader, self.writer = await asyncio.open_connection(self.host, self.port)
@@ -69,7 +78,12 @@ class NexusConnection:
         return False
     
     async def disconnect(self) -> None:
-        """Disconnect from the server"""
+        """
+        Disconnect from the server and clean up resources.
+        
+        This method cancels any pending read tasks and properly closes the writer.
+        It is safe to call even if not connected.
+        """
         if self.read_task:
             self.read_task.cancel()
             try:
@@ -94,28 +108,55 @@ class NexusConnection:
     
     @property
     def connected(self):
-        """Check if we are connected to the server"""
+        """
+        Check if we are connected to the server.
+        
+        Returns:
+            Boolean indicating if currently connected to the server
+        """
         return self.connection_id is not None
     
     def get_task(self):
-        """Get the message reading task"""
+        """
+        Get the message reading task.
+        
+        Returns:
+            The asyncio Task handling background message processing, or None if not connected
+        """
         return self.read_task
 
     def subscribe(self, event_type: str, callback: CallbackT) -> SubscriptionToken:
-        """Subscribe to events of a specific type with either a sync or async callback function
+        """
+        Subscribe to events of a specific type with either a sync or async callback function.
         
         Args:
             event_type: The type of event to subscribe to
             callback: A callback function that can be either synchronous or asynchronous
+            
+        Returns:
+            A subscription token that can be used to unsubscribe later
         """
         return self._event_bus.subscribe(event_type, callback)
 
     def on_server_message(self, callback: CallbackT) -> SubscriptionToken:
-        """Shorthand to subscribe to server messages"""
+        """
+        Shorthand to subscribe to server messages.
+        
+        Args:
+            callback: A callback function that will be called when server messages are received
+            
+        Returns:
+            A subscription token that can be used to unsubscribe later
+        """
         return self.subscribe("server_message", callback)
     
     def unsubscribe(self, token: SubscriptionToken):
-        """Unsubscribe from an event using the token returned by subscribe."""
+        """
+        Unsubscribe from an event using the token returned by subscribe.
+        
+        Args:
+            token: The subscription token returned by a previous call to subscribe
+        """
         self._event_bus.unsubscribe(token)
     
     async def _read_messages(self):
@@ -185,8 +226,21 @@ class NexusConnection:
         timeout: float | None = 60.0
     ) -> Any:
         """
-        Send a command to the server without waiting for a response
-        Responses will be handled by the background message processing task
+        Send a command to the server and wait for a response.
+        
+        Args:
+            command: The command name to execute on the server
+            payload: Optional dictionary of parameters to pass to the command
+            timeout: Maximum time in seconds to wait for a response, or None for no timeout
+            
+        Returns:
+            The result returned by the server command
+            
+        Raises:
+            ConnectionError: If not connected to the server when attempting to send
+            asyncio.TimeoutError: If the server does not respond within the timeout period
+            Exception: If the server returns an error response or if there's an issue with sending
+                the command or processing the response
         """
         if not self.connected or not self.writer:
             logfire.error("Send Command Error: Not connected to server")
@@ -241,7 +295,14 @@ class NexusConnection:
 
     async def list_commands(self) -> list[CommandInfo]:
         """
-        Retrieve a list of available commands from the server
+        Retrieve a list of available commands from the server.
+        
+        Returns:
+            List of CommandInfo objects describing available server commands
+            
+        Raises:
+            ValidationError: If the server response cannot be parsed as a command list
+            Exceptions from send_command: If there are connection or timeout errors
         """
         response = await self.send_command("list_commands")
 
