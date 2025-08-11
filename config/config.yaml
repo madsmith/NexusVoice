@@ -7,6 +7,7 @@ nexus:
       history_context: 120
   bot:
     discord_token: ${private.discord.token}
+    notify_users: ${private.discord.notify_users}
   client:
     no_response_error: "Something went wrong, there is no response."
     timeouts:

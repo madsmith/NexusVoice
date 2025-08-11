@@ -26,6 +26,7 @@ class NexusDiscordBot():
 
         self._notify_users: list[discord.User | discord.Member] = []
 
+
     
     async def initialize(self):
 
@@ -41,7 +42,20 @@ class NexusDiscordBot():
         
         with logfire.span("Connection Lifecycle"):
             await self._nexus_connection.connect()
-            await self._bot.start(discord_token)
+            print("Starting bot")
+
+            await self._bot.login(discord_token)
+            
+            for user_id in self.config.get("nexus.bot.notify_users"):
+                user = self._bot.get_user(user_id) or await self._bot.fetch_user(user_id)
+                if user:
+                    logger.info(f"Added notify user: {user}")
+                    self._notify_users.append(user)
+                else:
+                    logger.warning(f"User not found: {user_id}")
+
+            # TODO: run bot in a task
+            await self._bot.connect()
 
     async def stop(self):
         if self._nexus_connection.connected:
@@ -128,6 +142,10 @@ class NexusDiscordBot():
 
     async def _prompt_agent(self, message: discord.Message):
         try:
+            if not self._nexus_connection.connected:
+                logger.info("Connecting to server...")
+                await self._nexus_connection.connect()
+            
             logger.info(f"Prompting agent: {message.content}")
             response = await self._nexus_connection.send_command(
                 "prompt_agent", {"prompt": message.content})
