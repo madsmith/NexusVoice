@@ -1,5 +1,5 @@
 from typing import List
-from nexusvoice.core.api.base import ModelResponse
+from nexusvoice.internal.api.base import ModelResponse
 from pydantic_ai.messages import TextPart, ModelResponsePart
 
 

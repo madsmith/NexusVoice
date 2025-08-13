@@ -5,7 +5,7 @@ import logfire
 from typing import Any, Awaitable, Callable, Generic, TypeAlias, TypeVar, cast
 from contextlib import AbstractAsyncContextManager
 
-from nexusvoice.core.api.base import AsyncContext
+from nexusvoice.internal.api.base import AsyncContext
 from nexusvoice.utils.state import StateMachine
 from nexusvoice.utils.debug import AsyncRateLimiter
 

@@ -1,5 +1,5 @@
 import pytest
-from nexusvoice.core.api.online import NexusAPIOnline
+from nexusvoice.internal.api.online import NexusAPIOnline
 from nexusvoice.core.config import load_config
 
 @pytest.mark.asyncio

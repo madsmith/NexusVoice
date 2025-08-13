@@ -17,8 +17,8 @@ from nexusvoice.ai.TTSInferenceEngine import TTSInferenceEngine
 from nexusvoice.audio.utils import AudioBuffer, AudioData, save_recording, save_recording_async
 from nexusvoice.audio.AudioDevice import AudioDevice
 from nexusvoice.utils.RuntimeContextManager import RuntimeContextManager
-from nexusvoice.core.api import NexusAPI, NexusAPIContext
-from nexusvoice.core.api.online import NexusAPIOnline
+from nexusvoice.internal.api import NexusAPI, NexusAPIContext
+from nexusvoice.internal.api.online import NexusAPIOnline
 from nexusvoice.core.config import NexusConfig
 from nexusvoice.db.interaction_log import InteractionLog
 from nexusvoice.utils.logging import get_logger

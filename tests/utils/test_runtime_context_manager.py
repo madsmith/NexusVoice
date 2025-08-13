@@ -1,10 +1,9 @@
+import asyncio
 import logfire
 import pytest
 
-from nexusvoice.core.config import load_config
 from nexusvoice.utils.RuntimeContextManager import RuntimeContextManager
-from nexusvoice.core.api.base import AsyncContext
-import asyncio
+from nexusvoice.internal.api.base import AsyncContext
 
 CONTEXT_TIMEOUT=2
 

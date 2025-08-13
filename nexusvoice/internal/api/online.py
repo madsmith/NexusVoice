@@ -4,7 +4,6 @@ from contextlib import AsyncExitStack
 import logfire
 import shlex
 from typing import Optional
-from nexusvoice.core.api.base import NexusHistoryContext
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.messages import ModelMessage, TextPart
 
@@ -17,7 +16,8 @@ from nexusvoice.ai.types import (
     NexusSupportDependencies,
     RequestType
 )
-from nexusvoice.core.api import NexusAPI, NexusAPIContext
+from nexusvoice.internal.api import NexusAPI, NexusAPIContext
+from nexusvoice.internal.api.base import NexusHistoryContext
 
 from nexusvoice.core.config import NexusConfig
 from nexusvoice.utils.logging import get_logger

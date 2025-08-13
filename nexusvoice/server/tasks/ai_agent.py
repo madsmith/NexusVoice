@@ -5,7 +5,7 @@ from nexusvoice.server.NexusServer import NexusServer
 from nexusvoice.server.tasks.base import NexusTask
 from nexusvoice.core.config import NexusConfig
 
-from nexusvoice.core.api.server import NexusAPIServer
+from nexusvoice.internal.api.server import NexusAPIServer
 
 class AIAgent(NexusTask):
     def __init__(self, server: NexusServer, config: NexusConfig):
