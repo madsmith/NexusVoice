@@ -1,6 +1,6 @@
 [project]
 name = "nexusvoice-core"
-version = "0.6.0"
+version = "0.6.2"
 description = "Core components from NexusVoice that can be used independently"
 readme = "README.md"
 requires-python = ">=3.10"
