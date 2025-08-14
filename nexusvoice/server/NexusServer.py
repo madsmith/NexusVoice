@@ -55,12 +55,6 @@ class NexusServer:
             description="List available commands"
         )
         self.register_command("ping", self._handle_ping, params=None, description="Ping the server")
-        self.register_command(
-            "queue_broadcast",
-            self._handle_queue_broadcast,
-            params=None,
-            description="Queue a broadcast message"
-        )
 
     async def start(self):
         """Initialize the server socket and start listening for connections"""
@@ -439,18 +433,6 @@ class NexusServer:
         """Handle ping command from client"""
         logfire.info(f"Ping from {client_id}")
         return "pong"
-
-    async def _handle_queue_broadcast(self, client_id: str) -> str:
-        """Handle queue broadcast command from client"""
-        logfire.info(f"Queue broadcast from {client_id}")
-        # defer queue a broadcast message in 2 seconds
-        async def do_broadcast():
-            await asyncio.sleep(4)
-            await self.broadcast("Hello from NexusServer")
-
-        asyncio.create_task(do_broadcast())
-        
-        return "ok"
     
     async def broadcast(self, message: str) -> None:
         """
