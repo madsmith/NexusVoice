@@ -18,8 +18,8 @@ from typing import Iterable
 
 from nexusvoice.bootstrap import get_logfire
 
-from nexusvoice.server.connection import NexusConnection
-from nexusvoice.server.types import CommandInfo
+from nexusvoice.core.protocol.connection import NexusConnection
+from nexusvoice.core.protocol.types import CommandInfo
 
 logger = logging.getLogger(__name__)
 

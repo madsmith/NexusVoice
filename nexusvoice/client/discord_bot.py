@@ -4,7 +4,7 @@ import logfire
 import logging
 
 from nexusvoice.core.config import NexusConfig
-from nexusvoice.server.connection import NexusConnection
+from nexusvoice.core.protocol.connection import NexusConnection
 
 
 logger = logging.getLogger(__name__)

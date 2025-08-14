@@ -7,7 +7,7 @@ import pkgutil
 from pydantic import ValidationError
 from pydantic.type_adapter import TypeAdapter
 
-from .types import (
+from nexusvoice.core.protocol.types import (
     ServerMessage,
     CallRequest,
     CallResponse,

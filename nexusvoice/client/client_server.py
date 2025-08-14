@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 from nexusvoice.core.config import NexusConfig
 from nexusvoice.client.client import NexusClientBase
 from nexusvoice.internal.api.online import NexusAPIOnline
-from nexusvoice.server.connection import NexusConnection
+from nexusvoice.core.protocol.connection import NexusConnection
 from nexusvoice.utils.RuntimeContextManager import RuntimeContextManager
 
 if TYPE_CHECKING:

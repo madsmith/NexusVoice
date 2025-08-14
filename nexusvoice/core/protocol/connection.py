@@ -1,10 +1,9 @@
-#!/usr/bin/env python3
 import asyncio
 import json
 import logfire
 from pydantic import ValidationError
 from pydantic.type_adapter import TypeAdapter
-from typing import Any, Callable, Protocol, Union, Awaitable
+from typing import Any, Callable, Union, Awaitable
 import uuid
 
 from nexusvoice.core.utils.eventbus import EventBus, SubscriptionToken
