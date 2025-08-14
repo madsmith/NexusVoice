@@ -1,5 +1,5 @@
 import asyncio
-from typing import Any, Awaitable, Callable, Dict, List, NamedTuple, Union
+from typing import Any, Awaitable, Callable, NamedTuple, Union
 
 EventT = str
 CallbackT = Callable[[Any], Union[Any, Awaitable[Any]]]
@@ -36,7 +36,7 @@ class SubscriberEntry(NamedTuple):
 class EventBus:
     def __init__(self):
         # For each event label, store a list of SubscriberEntry
-        self._subscribers: Dict[EventT, List[SubscriberEntry]] = {}
+        self._subscribers: dict[EventT, list[SubscriberEntry]] = {}
         # Single global monotonically increasing nonce
         self._nonce: int = 0
         self._loop = asyncio.get_event_loop()

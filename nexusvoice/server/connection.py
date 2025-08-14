@@ -7,7 +7,7 @@ from pydantic.type_adapter import TypeAdapter
 from typing import Any, Callable, Protocol, Union, Awaitable
 import uuid
 
-from nexusvoice.utils.eventbus import EventBus, SubscriptionToken
+from nexusvoice.core.utils.eventbus import EventBus, SubscriptionToken
 
 from .types import (
     CallRequest,

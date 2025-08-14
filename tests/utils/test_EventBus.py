@@ -1,6 +1,6 @@
 import pytest
 import asyncio
-from nexusvoice.utils.eventbus import EventBus
+from nexusvoice.core.utils.eventbus import EventBus
 
 @pytest.mark.asyncio
 async def test_basic_emit_and_subscribe():

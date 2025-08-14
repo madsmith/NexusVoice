@@ -5,7 +5,7 @@ import re
 import traceback
 from typing import TYPE_CHECKING, Awaitable, Callable, List, Any
 
-from nexusvoice.utils.eventbus import EventBus, EventT, SubscriptionToken
+from nexusvoice.core.utils.eventbus import EventBus, EventT, SubscriptionToken
 
 from nexusvoice.tools.lutron.types import (
     COMMAND_QUERY_PREFIX,

@@ -36,13 +36,37 @@ sudo apt install portaudio19-dev ffmpeg
 
 ### 4. Install Python dependencies
 
-#### Editable install (recommended for development)
+NexusVoice uses `uv` for dependency management. If you don't have it installed, [install it first](https://github.com/astral-sh/uv):
 
 ```sh
-pip install -e .[dev]
+pip install uv
 ```
 
-This installs the `nexusvoice` package in editable mode and includes development dependencies like `matplotlib`.
+#### Full Project Installation (for developers)
+
+Install the entire project in editable mode with development dependencies:
+
+```sh
+uv pip install -e ".[dev]"
+```
+
+#### Submodule Installation Options
+
+NexusVoice is organized with modular subpackages. You can install just what you need:
+
+**Core Module Only** (minimal dependencies for projects using just NexusConfig):
+
+```sh
+uv pip install -e ./nexusvoice/core
+```
+
+**Development Workflow** (when working on both core and main project):
+
+```sh
+# Install core first, then main project
+uv pip install -e ./nexusvoice/core
+uv pip install -e .
+```
 
 ## Usage
 
