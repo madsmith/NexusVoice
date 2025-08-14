@@ -1,6 +1,6 @@
 [project]
 name = "nexusvoice"
-version = "0.6.2"
+version = "0.6.3"
 description = "NexusVoice Application"
 readme = "README.md"
 requires-python = ">=3.12"
