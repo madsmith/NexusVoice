@@ -17,7 +17,10 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 package-dir = {"" = "../.."}  # Look two directories up from nexusvoice/core
-packages = ["nexusvoice.core"]
+
+[tool.setuptools.find-namespace-packages]
+where = ["../.."]  # Look two directories up from nexusvoice/core
+include = ["nexusvoice.core*"]  # Include core and all subpackages
 
 [tool.setuptools.package-data]
 "nexusvoice.core" = ["*.md"]
