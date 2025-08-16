@@ -59,6 +59,9 @@ class AudioDevice:
         # Discard the first few microphone frames as the microphone subsystem warms up
         self._mic_warmup_frames = 1024 * 3
 
+        self._enable_mic = True
+        self._enable_playback = True
+
         self._playback_thread = None
         self._mic_thread = None
 
@@ -82,12 +85,16 @@ class AudioDevice:
     def start(self):
         self.running = True
 
-        self._start_playback_thread()
-        self._start_mic_thread()
+        if self._enable_playback:
+            self._start_playback_thread()
+        if self._enable_mic:
+            self._start_mic_thread()
 
         # Wait for both threads to be ready
-        self.playback_ready.wait()
-        self.mic_ready.wait()
+        if self._enable_playback:
+            self.playback_ready.wait()
+        if self._enable_mic:
+            self.mic_ready.wait()
 
     def stop(self):
         self.running = False
@@ -106,6 +113,14 @@ class AudioDevice:
             if self.speaker_index == -1 and info["maxOutputChannels"] > 0:
                 self.speaker_index = i
 
+    def set_mic_enabled(self, enabled: bool = True):
+        assert not self.running, "Cannot adjust configuration after audio device has started"
+        self._enable_mic = bool(enabled)
+    
+    def set_playback_enabled(self, enabled: bool = True):
+        assert not self.running, "Cannot adjust configuration after audio device has started"
+        self._enable_playback = bool(enabled)
+    
     def _start_mic_thread(self):
         def mic_worker():
             with TimeThis("Mic thread init", logger.debug):
