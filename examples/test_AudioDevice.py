@@ -13,7 +13,7 @@ from scipy.signal import chirp, correlate, spectrogram
 import time
 import wave
 
-from nexusvoice.audio.AudioDevice import AudioDevice
+from nexusvoice.audio import AudioDevice
 from nexusvoice.audio.music import Tone, Rest
 from nexusvoice.audio.utils import AudioData
 from nexusvoice.utils.debug import TimeThis

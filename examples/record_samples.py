@@ -6,7 +6,7 @@ from nexusvoice.utils.logging import get_logger
 logger = get_logger(__name__)
 #logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - '%(message)s'")
 
-from nexusvoice.audio.AudioDevice import AudioDevice
+from nexusvoice.audio import AudioDevice
 from nexusvoice.audio.utils import AudioBuffer, AudioData, save_recording, save_recording_mp3
 
 AUDIO_FORMAT = pyaudio.paInt16

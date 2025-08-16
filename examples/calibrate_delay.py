@@ -13,7 +13,7 @@ logger = get_logger(__name__)
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 
-from nexusvoice.audio.AudioDevice import AudioDevice
+from nexusvoice.audio import AudioDevice
 from nexusvoice.audio.utils import AudioData
 from nexusvoice.utils.debug import TimeThis
 

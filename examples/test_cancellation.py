@@ -12,7 +12,7 @@ import sys
 BASE_DIR = Path(__file__).resolve().parent
 ROOT_DIR = BASE_DIR.parent
 
-from nexusvoice.audio.AudioDevice import AudioDevice
+from nexusvoice.audio import AudioDevice
 from nexusvoice.audio.utils import AudioData
 from nexusvoice.utils.debug import TimeThis
 

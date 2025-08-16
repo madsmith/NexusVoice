@@ -13,7 +13,7 @@ logger = get_logger(__name__)
 #logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - '%(message)s'")
 ROOT_DIR = Path(__file__).resolve().parents[1]
 
-from nexusvoice.audio.AudioDevice import AudioDevice
+from nexusvoice.audio import AudioDevice
 from nexusvoice.audio.utils import AudioData
 
 AUDIO_FORMAT = pyaudio.paInt16

@@ -15,7 +15,7 @@ from typing import Protocol
 from nexusvoice.ai.AudioInferenceEngine import AudioInferenceEngine
 from nexusvoice.ai.TTSInferenceEngine import TTSInferenceEngine
 from nexusvoice.audio.utils import AudioBuffer, AudioData, save_recording, save_recording_async
-from nexusvoice.audio.AudioDevice import AudioDevice
+from nexusvoice.audio import AudioDevice
 from nexusvoice.utils.RuntimeContextManager import RuntimeContextManager
 from nexusvoice.internal.api import NexusAPI, NexusAPIContext
 from nexusvoice.internal.api.online import NexusAPIOnline
