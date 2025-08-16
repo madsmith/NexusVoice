@@ -51,7 +51,7 @@ class AudioDevice:
         self.playback_is_playing = False
         self.playback_last_frame_time = 0
 
-        self.running = True
+        self.running = False
         self._filtered = True
         self.filtered = True
         self.delay = 0
