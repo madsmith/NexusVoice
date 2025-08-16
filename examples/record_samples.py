@@ -18,7 +18,8 @@ def main():
     # Initialize the AudioDevice
     device = AudioDevice()
     device.set_sample_delay(-2200)
-    device.reset_microphone()
+    device.initialize()
+    device.start()
 
     # Initialize the Silero VAD
     vad_model = silero_vad.load_silero_vad()

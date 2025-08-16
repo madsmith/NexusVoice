@@ -173,6 +173,8 @@ def main():
     # Initialize the AudioDevice
     device = AudioDevice(chunk_size=CHUNK)
     device.set_sample_delay(-2500)
+    device.initialize()
+    device.start()
 
     # Load playback sample
     sample = AudioData.from_wave(ROOT_DIR / "examples" / "resources" / "test_ai_response_short.wav")

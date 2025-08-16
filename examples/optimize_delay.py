@@ -198,6 +198,8 @@ def measure_baseline(device, sample, sample_delay, measurements=3, all_data=None
 def main():
     # Initialize the AudioDevice
     device = AudioDevice()
+    device.initialize()
+    device.start()
 
     # Load playback sample
     sample = AudioData.from_wave(ROOT_DIR / "examples" / "resources" / "test_ai_response_short.wav")

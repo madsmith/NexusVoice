@@ -302,6 +302,8 @@ def main():
     print(f"Sample: {len(sample)//pyaudio.get_sample_size(FORMAT)} frames")
     with TimeThis("AudioDevice init"):
         device = AudioDevice()
+        device.initialize()
+        device.start()
     
     # Measure playback-to-mic delay
     # delay, score = measure_playback_to_mic_delay(device, signal_duration=1, with_plot=True)

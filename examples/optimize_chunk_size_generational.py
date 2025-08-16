@@ -196,6 +196,8 @@ def test_chunk_size(chunk_size, measurements=3):
     global enable_graph
 
     device = AudioDevice(chunk_size=chunk_size)
+    device.initialize()
+    device.start()
 
     # Load playback sample
     sample = AudioData.from_wave(ROOT_DIR / "examples" / "resources" / "test_ai_response_short.wav")

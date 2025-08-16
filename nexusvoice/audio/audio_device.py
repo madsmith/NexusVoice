@@ -28,7 +28,6 @@ class AudioDevice:
         self._audio = pyaudio.PyAudio()
         self.mic_index = -1
         self.speaker_index = -1
-        self._find_devices()
 
         self.format = format
         self.rate = rate
@@ -63,13 +62,6 @@ class AudioDevice:
         self._playback_thread = None
         self._mic_thread = None
 
-        self._start_playback_thread()
-        self._start_mic_thread()
-
-        # Wait for both threads to be ready
-        self.playback_ready.wait()
-        self.mic_ready.wait()
-
     @property
     def audio(self):
         assert self._audio is not None, "Audio not initialized"
@@ -83,6 +75,28 @@ class AudioDevice:
 
     def set_filter_mode(self, mode):
         self._filtered = bool(mode)
+
+    def initialize(self):
+        self._find_devices()
+
+    def start(self):
+        self.running = True
+
+        self._start_playback_thread()
+        self._start_mic_thread()
+
+        # Wait for both threads to be ready
+        self.playback_ready.wait()
+        self.mic_ready.wait()
+
+    def stop(self):
+        self.running = False
+        if self._mic_thread is not None:
+            self._mic_thread.join()
+        if self._playback_thread is not None:
+            self._playback_thread.join()
+        self.audio.terminate()
+        self._audio = None
 
     def _find_devices(self):
         for i in range(self.audio.get_device_count()):
@@ -370,10 +384,4 @@ class AudioDevice:
         logger.debug(f"Queued {chunks_queued} chunks for playback")
 
     def shutdown(self):
-        self.running = False
-        if self._mic_thread is not None:
-            self._mic_thread.join()
-        if self._playback_thread is not None:
-            self._playback_thread.join()
-        self.audio.terminate()
-        self._audio = None
+        self.stop()

@@ -133,6 +133,8 @@ class NexusVoiceClient:
 
         self._audio_device = AudioDevice()
         self._audio_device.set_sample_delay(self.config.get("nexus.client.audio.sample_delay", -2200))
+        self._audio_device.initialize()
+        self._audio_device.start()
 
     @logfire.instrument("Initialize Wake Word Model")
     def _initialize_wake_word_model(self):
