@@ -37,6 +37,7 @@ dependencies = [
 nexus-client-standalone = "nexusvoice.client.main_standalone:main"
 nexus-client = "nexusvoice.client.main_client_server:main"
 nexus-discord-bot = "nexusvoice.client.main_discord_bot:main"
+nexus-announcer = "nexusvoice.client.main_announcer:main"
 nexus-server = "nexusvoice.server.main:main"
 nexus-repl-client = "nexusvoice.client.repl_client:main"
 
