@@ -393,8 +393,14 @@ class NexusServer:
         
         # Check if there were any issues
         if missing_params or invalid_params:
+            msg = f"Invalid parameters for command '{command_name}': "
+            if missing_params:
+                msg += f"Missing parameters: {', '.join(missing_params)}"
+            if invalid_params:
+                msg += f"Invalid parameters: {', '.join(invalid_params.keys())}"
+            logfire.error(msg)
             raise CommandParameterError(
-                message=f"Invalid parameters for command '{command_name}'", 
+                message=msg, 
                 missing_params=missing_params, 
                 invalid_params=invalid_params
             )
