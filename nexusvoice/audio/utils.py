@@ -206,20 +206,20 @@ class AudioData:
         self.channels = channels
         self.rate = rate
         if isinstance(frames, np.ndarray):
-            self.frames = frames.tobytes()
+            self._raw_data = frames.tobytes()
         else:
-            self.frames = frames
+            self._raw_data = frames
         self.timestamp = timestamp or time.perf_counter()
 
     def as_bytes(self) -> bytes:
         """ Return raw audio bytes """
-        return self.frames
+        return self._raw_data
     
     def as_array(self, dtype=None) -> np.ndarray:
         """ Convert bytes to numpy array """
         sample_dtype, _ = self.get_type_info()
 
-        np_array = np.frombuffer(self.frames, dtype=sample_dtype)
+        np_array = np.frombuffer(self._raw_data, dtype=sample_dtype)
 
         if self.channels > 1:
             np_array = np_array.reshape(-1, self.channels)
@@ -233,7 +233,7 @@ class AudioData:
         return self.frame_count()
 
     def frame_count(self) -> int:
-        return len(self.frames) // pyaudio.get_sample_size(self.format) // self.channels
+        return len(self._raw_data) // pyaudio.get_sample_size(self.format) // self.channels
     
     def duration(self) -> float:
         return self.frame_count() / self.rate
