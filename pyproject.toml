@@ -24,6 +24,7 @@ dependencies = [
     "pydantic>=2.11.7",
     "pydub~=0.25",
     "requests>=2.32.3",
+    "scikit-learn>=1.4.0",
     "setuptools",
     "silero-vad==5.1.2",
     "silero==0.4.1",
@@ -44,7 +45,6 @@ nexus-repl-client = "nexusvoice.client.repl_client:main"
 [project.optional-dependencies]
 dev = [
     "matplotlib>=3.10",
-    "scikit-learn>=1.4.0",
     "pytest>=8.3.0",
     "pytest-asyncio>=1.0",
 ]
