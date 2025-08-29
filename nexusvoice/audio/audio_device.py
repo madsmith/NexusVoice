@@ -12,6 +12,7 @@ from scipy.ndimage import uniform_filter1d
 from nexusvoice.utils.logging import get_logger
 logger = get_logger(__name__)
 
+from nexusvoice.audio.mixer import ChannelMixer
 from nexusvoice.audio.utils import AudioData, PlaybackBuffer
 from nexusvoice.utils.debug import TimeThis
 
@@ -380,6 +381,63 @@ class AudioDevice:
             self.read_did_overflow = False
 
     def play(self, audio_data):
+        assert self.running, "AudioDevice is not running"
+
+        sample_size_out = pyaudio.get_sample_size(self.format)
+        bytes_per_out_chunk = self.chunk_size * sample_size_out * self.channels
+
+        chunks_queued = 0
+
+        if isinstance(audio_data, AudioData):
+            # Validate format and (ideally) rate
+            assert audio_data.format == self.format, "AudioData format must match device format"
+            if audio_data.rate != self.rate:
+                # For now, require caller to resample ahead of time
+                raise ValueError(f"AudioData rate {audio_data.rate} must match device rate {self.rate}")
+
+            in_channels = audio_data.channels
+            in_sample_size = pyaudio.get_sample_size(audio_data.format)
+            input_bytes = audio_data.as_bytes()
+
+            # Mixer only if channel counts differ
+            mixer = ChannelMixer(in_channels, self.channels) if in_channels != self.channels else None
+
+            frames_per_in_chunk = self.chunk_size  # keep frame alignment
+            bytes_per_in_chunk = frames_per_in_chunk * in_sample_size * in_channels
+
+            total_length = len(input_bytes)
+            for i in range(0, total_length, bytes_per_in_chunk):
+                in_chunk = input_bytes[i:i + bytes_per_in_chunk]
+                if mixer is not None and len(in_chunk) > 0:
+                    out_chunk = mixer.mix(in_chunk, in_sample_size)
+                else:
+                    out_chunk = in_chunk
+
+                # Ensure output chunk matches device channel layout and size
+                if len(out_chunk) < bytes_per_out_chunk:
+                    # Pad with zeros to complete the device chunk
+                    out_chunk = out_chunk + bytes(bytes_per_out_chunk - len(out_chunk))
+                elif len(out_chunk) > bytes_per_out_chunk:
+                    # Trim if somehow larger (shouldn't happen with frame-aligned input)
+                    out_chunk = out_chunk[:bytes_per_out_chunk]
+
+                self.playback_queue.put(out_chunk)
+                chunks_queued += 1
+
+        elif isinstance(audio_data, bytes):
+            # Assume already matching device format/channels
+            total_length = len(audio_data)
+            for i in range(0, total_length, bytes_per_out_chunk):
+                chunk = audio_data[i:i + bytes_per_out_chunk]
+                if len(chunk) < bytes_per_out_chunk:
+                    chunk = chunk + bytes(bytes_per_out_chunk - len(chunk))
+                self.playback_queue.put(chunk)
+                chunks_queued += 1
+        else:
+            raise ValueError("audio_data must be of type AudioData or bytes")
+
+        logger.debug(f"Queued {chunks_queued} chunks for playback")
+
         assert self.running, "AudioDevice is not running"
 
         if isinstance(audio_data, AudioData):

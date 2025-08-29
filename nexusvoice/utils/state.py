@@ -1,6 +1,6 @@
 import logging
 from enum import Enum
-from typing import Dict, Optional, TypeVar, Generic
+from typing import TypeVar, Generic
 
 StateT = TypeVar("StateT", bound=Enum)
 EventT = TypeVar("EventT", bound=Enum)
@@ -19,9 +19,9 @@ class StateMachine(Generic[StateT, EventT]):
                 ...
             }
     """
-    TRANSITIONS: Dict[StateT, Dict[EventT, StateT]] = {}
+    TRANSITIONS: dict[StateT, dict[EventT, StateT]] = {}
 
-    def __init__(self, initial_state: Optional[StateT] = None):
+    def __init__(self, initial_state: StateT | None = None):
         if initial_state is not None:
             state = initial_state
         else:
